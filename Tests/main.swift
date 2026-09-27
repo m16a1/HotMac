@@ -1,7 +1,7 @@
 import Foundation
 
 // Dependency-free test harness for the HotMac logic layer.
-// Run with HotMac/test.sh.
+// Run with HotMac/test.py.
 //
 // These cover the pure logic only (decoding, the key-to-component mapping,
 // the plausibility filter, group averaging, the menu bar label). Reading the

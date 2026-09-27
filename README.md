@@ -19,7 +19,7 @@ and lets you watch the individual component temperatures over time.
 ## Build and run
 
 ```bash
-./build.sh          # compile Sources/ into HotMac.app
+./build.py          # compile Sources/ into HotMac.app
 open HotMac.app     # launch
 pkill -x HotMac     # stop
 ```
@@ -27,17 +27,32 @@ pkill -x HotMac     # stop
 The app is a menu bar extra (`LSUIElement`), so it has no Dock icon. Look for
 the temperature in your menu bar.
 
+## Layout
+
+`Sources/` is split into a data layer and a presentation layer:
+
+- `Sources/Sensors/` — `SMC.swift` (the IOKit client), `Sensors.swift` (the
+  key mapping and decoding), `TemperatureModel.swift` (sampling, history).
+- `Sources/UI/` — `HotMacApp.swift` (the `@main` scene), `ContentView.swift`
+  (the `TabView` shell), `SettingsView.swift`, `GraphsView.swift`.
+- `Tests/`, `build.py`, `test.py`, `Info.plist`.
+
+`build.py` walks `Sources/` recursively, so a new file in either subdirectory
+is compiled with no extra wiring. Both scripts are Python, which ships in the
+same Command Line Tools package as `swiftc`.
+
 ## Tests
 
 ```bash
-./test.sh           # 58 checks over the decoding and mapping logic
+./test.py           # 58 checks over the decoding and mapping logic
 ```
 
 The tests need no framework or package manager: they compile `Tests/main.swift`
-together with the sources and assert directly. They cover value decoding, the
-key-to-component mapping, the static-register exclusion, the plausibility
-filter, group averaging, and the menu bar label. Reading the real SMC is not
-unit-tested, because it only works against the hardware.
+together with the three `Sources/Sensors/` files and assert directly. They cover
+value decoding, the key-to-component mapping, the aggregate and derived-sensor
+exclusions, the plausibility filter, group averaging, and the menu bar label.
+Reading the real SMC is not unit-tested, because it only works against the
+hardware.
 
 ## How it works
 
@@ -53,7 +68,7 @@ table itself, the same way other macOS monitoring tools do.
   walks the table once to learn each key's size, format, and endianness, then
   reads only the value on each tick. A tick is about 10 ms of CPU, so the
   default 2 s refresh costs well under 1% of one core.
-- Keys are mapped to named components in `Sources/Sensors.swift`. The GPU,
+- Keys are mapped to named components in `Sources/Sensors/Sensors.swift`. The GPU,
   memory, uncore, and package are recognised by prefix (`Tg*`, `Tm*`, `TUD*`,
   `TN*`); the CPU cores need a per-chip list because Apple reuses the `Tp`/`Te`/
   `Tf` prefixes for different blocks across generations.
