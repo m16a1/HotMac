@@ -187,14 +187,58 @@ struct TemperatureModelTests {
     }
 
     @Test func historyIsCapped() {
-        let transport = FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])
-        let trimming = testModel(makeSMC: { SMC(transport: transport) })
-        trimming.stop()
+        withStoredHistoryLimit(nil) {
+            let transport = FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])
+            let trimming = testModel(makeSMC: { SMC(transport: transport) })
+            trimming.stop()
 
-        for _ in 0..<(TemperatureModel.maxHistory + 1) {
-            trimming.sample()
+            for _ in 0..<(TemperatureModel.defaultHistoryLimit + 1) {
+                trimming.sample()
+            }
+            #expect(trimming.history.count == TemperatureModel.defaultHistoryLimit)
         }
-        #expect(trimming.history.count == TemperatureModel.maxHistory)
+    }
+
+    @Test func loweringTheLimitTrimsTheHistoryAtOnce() {
+        withStoredHistoryLimit(nil) {
+            let transport = FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])
+            let model = testModel(makeSMC: { SMC(transport: transport) })
+            for _ in 0..<5 {
+                model.sample()
+            }
+            #expect(model.history.count == 5)
+
+            model.historyLimit = 2
+            #expect(model.history.count == 2)
+        }
+    }
+
+    @Test func aStoredHistoryLimitIsRestored() {
+        withStoredHistoryLimit(120) {
+            #expect(testModel().historyLimit == 120)
+        }
+    }
+
+    @Test func aNonNumericStoredHistoryLimitIsIgnored() {
+        withStoredHistoryLimit("nonsense") {
+            #expect(testModel().historyLimit == TemperatureModel.defaultHistoryLimit)
+        }
+    }
+
+    @Test func aNonPositiveStoredHistoryLimitIsIgnored() {
+        withStoredHistoryLimit(0) {
+            #expect(testModel().historyLimit == TemperatureModel.defaultHistoryLimit)
+        }
+    }
+
+    @Test func aChangedHistoryLimitIsPersisted() {
+        withStoredHistoryLimit(nil) {
+            let model = testModel()
+            model.historyLimit = 300
+
+            #expect(model.historyLimit == 300)
+            #expect(UserDefaults.standard.object(forKey: storedHistoryLimitKey) as? Int == 300)
+        }
     }
 
     #if DEBUG

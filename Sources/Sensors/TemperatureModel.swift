@@ -8,9 +8,10 @@ public final class TemperatureModel: ObservableObject {
     /// Sampling period in seconds before the user moves the slider.
     public static let defaultRefreshPeriod: Double = 2.0
 
-    /// UserDefaults key holding the user's sampling period.
+    /// UserDefaults keys holding the user's settings.
     private enum Storage {
         static let refreshPeriodKey = "refreshPeriod"
+        static let historyLimitKey = "historyLimit"
     }
 
     private static let queueLabel = "com.hotmac.smc"
@@ -18,8 +19,9 @@ public final class TemperatureModel: ObservableObject {
     private static let celsiusSymbol = "°C"
     private static let menuBarPlaceholder = "--\(TemperatureModel.celsiusSymbol)"
 
-    /// How many samples the graph keeps before the oldest are dropped.
-    static let maxHistory = 900
+    /// How many samples the graph keeps before the oldest are dropped, before
+    /// the user moves the slider.
+    public static let defaultHistoryLimit = 900
 
     public struct HistoryPoint: Identifiable {
         public let id: UUID
@@ -45,6 +47,10 @@ public final class TemperatureModel: ObservableObject {
     @Published public private(set) var lastUpdate: Date?
     @Published public var refreshPeriod: Double = TemperatureModel.defaultRefreshPeriod {
         didSet { persistPeriod(); restartTimer() }
+    }
+    /// How many samples the graph keeps. Lowering it drops the surplus at once.
+    @Published public var historyLimit: Int = TemperatureModel.defaultHistoryLimit {
+        didSet { persistHistoryLimit(); trimHistory() }
     }
 
     private let queue = DispatchQueue(label: TemperatureModel.queueLabel, qos: .utility)
@@ -81,6 +87,10 @@ public final class TemperatureModel: ObservableObject {
         if let stored = UserDefaults.standard.object(forKey: Storage.refreshPeriodKey) as? Double,
            stored > 0 {
             refreshPeriod = stored
+        }
+        if let stored = UserDefaults.standard.object(forKey: Storage.historyLimitKey) as? Int,
+           stored > 0 {
+            historyLimit = stored
         }
         if startImmediately {
             start()
@@ -129,6 +139,10 @@ public final class TemperatureModel: ObservableObject {
 
     private func persistPeriod() {
         UserDefaults.standard.set(refreshPeriod, forKey: Storage.refreshPeriodKey)
+    }
+
+    private func persistHistoryLimit() {
+        UserDefaults.standard.set(historyLimit, forKey: Storage.historyLimitKey)
     }
 
     private func restartTimer() {
@@ -189,8 +203,13 @@ public final class TemperatureModel: ObservableObject {
         self.errorMessage = nil
         self.lastUpdate = point.time
         history.append(point)
-        if history.count > TemperatureModel.maxHistory {
-            history.removeFirst(history.count - TemperatureModel.maxHistory)
-        }
+        trimHistory()
+    }
+
+    /// Drop the oldest samples once the graph holds more than the limit. Runs
+    /// both when a sample arrives and when the user lowers the limit.
+    private func trimHistory() {
+        guard history.count > historyLimit else { return }
+        history.removeFirst(history.count - historyLimit)
     }
 }

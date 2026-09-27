@@ -1,10 +1,11 @@
 import Foundation
 @testable import Sensors
 
-/// The defaults key `TemperatureModel` restores the sampling period from. It is
-/// private in the model, so the suite spells it out: a rename there has to break
-/// these tests rather than silently stop covering the restore path.
+/// The defaults keys `TemperatureModel` restores its settings from. They are
+/// private in the model, so the suite spells them out: a rename there has to
+/// break these tests rather than silently stop covering the restore paths.
 let storedRefreshPeriodKey = "refreshPeriod"
+let storedHistoryLimitKey = "historyLimit"
 
 /// A model with a deterministic brand, a fake SMC, and synchronous delivery.
 ///
@@ -22,23 +23,30 @@ func testModel(
     )
 }
 
-/// Run *body* with the stored sampling period set to *value*, then put the
-/// previous value back, so the suite leaves the machine's defaults as it found
-/// them.
-func withStoredRefreshPeriod(_ value: Any?, _ body: () -> Void) {
-    let saved = UserDefaults.standard.object(forKey: storedRefreshPeriodKey)
+/// Run *body* with the default at *key* set to *value*, then put the previous
+/// value back, so the suite leaves the machine's defaults as it found them.
+func withStoredDefault(_ key: String, _ value: Any?, _ body: () -> Void) {
+    let saved = UserDefaults.standard.object(forKey: key)
     defer {
         if let saved {
-            UserDefaults.standard.set(saved, forKey: storedRefreshPeriodKey)
+            UserDefaults.standard.set(saved, forKey: key)
         } else {
-            UserDefaults.standard.removeObject(forKey: storedRefreshPeriodKey)
+            UserDefaults.standard.removeObject(forKey: key)
         }
     }
 
     if let value {
-        UserDefaults.standard.set(value, forKey: storedRefreshPeriodKey)
+        UserDefaults.standard.set(value, forKey: key)
     } else {
-        UserDefaults.standard.removeObject(forKey: storedRefreshPeriodKey)
+        UserDefaults.standard.removeObject(forKey: key)
     }
     body()
+}
+
+func withStoredRefreshPeriod(_ value: Any?, _ body: () -> Void) {
+    withStoredDefault(storedRefreshPeriodKey, value, body)
+}
+
+func withStoredHistoryLimit(_ value: Any?, _ body: () -> Void) {
+    withStoredDefault(storedHistoryLimitKey, value, body)
 }
