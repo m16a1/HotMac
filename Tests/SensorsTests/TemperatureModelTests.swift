@@ -38,6 +38,28 @@ struct TemperatureModelTests {
         #expect(model.menuBarTitle == "45°C")
     }
 
+    /// The reading can be gathered and inspected without publishing it.
+    @Test func aReadingCanBeGatheredWithoutPublishingIt() throws {
+        let model = model()
+        let reading = try model.readTick()
+        let tick = try #require(reading)
+
+        #expect(tick.snapshot.highest == 45.0)
+        #expect(tick.point.values[SensorCatalog.hottestSeriesName] == 45.0)
+        #expect(model.snapshot == nil)
+        #expect(model.history.isEmpty)
+    }
+
+    /// A machine with no temperature keys is not an error, just no reading.
+    @Test func nothingToReadYieldsNoTick() throws {
+        let empty = testModel(makeSMC: {
+            SMC(transport: FakeSMCTransport(order: [], table: [:]))
+        })
+        let reading = try empty.readTick()
+
+        #expect(reading == nil)
+    }
+
     @Test func theSeriesAreTheGroupsPlusTheHotspot() {
         let model = model()
         model.sample()
@@ -72,6 +94,7 @@ struct TemperatureModelTests {
         failing.sample()
 
         #expect(failing.errorMessage?.contains("no AppleSMC service") == true)
+        #expect(failing.errorMessage?.hasPrefix("SMC connection failed") == true)
         #expect(failing.snapshot == nil)
     }
 
@@ -80,6 +103,7 @@ struct TemperatureModelTests {
         metering.sample()
 
         #expect(metering.errorMessage?.contains("kernel said no") == true)
+        #expect(metering.errorMessage?.hasPrefix("SMC key table failed") == true)
     }
 
     /// An empty table is a machine with nothing to report, not a failure.

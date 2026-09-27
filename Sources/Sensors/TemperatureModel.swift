@@ -33,6 +33,12 @@ public final class TemperatureModel: ObservableObject {
         }
     }
 
+    /// One completed reading, waiting to be published on the main queue.
+    struct Tick {
+        let snapshot: TemperatureSnapshot
+        let point: HistoryPoint
+    }
+
     @Published public private(set) var snapshot: TemperatureSnapshot?
     @Published public private(set) var history: [HistoryPoint] = []
     @Published public private(set) var errorMessage: String?
@@ -42,7 +48,10 @@ public final class TemperatureModel: ObservableObject {
     }
 
     private let queue = DispatchQueue(label: TemperatureModel.queueLabel, qos: .utility)
-    private let brand: String
+
+    /// The chip brand reported in the snapshot. Internal so the DEBUG preview
+    /// file can build a snapshot with it.
+    let brand: String
 
     /// Creates the SMC connection. Injectable so tests can supply a client
     /// wired to a fake transport instead of the kernel.
@@ -53,8 +62,7 @@ public final class TemperatureModel: ObservableObject {
     private let deliver: (@escaping () -> Void) -> Void
 
     private var timer: DispatchSourceTimer?
-    private var smc: SMC?
-    private var meta: [String: SMC.KeyInfo] = [:]
+    private var session: SMCSession?
     private var started = false
 
     /// Dependencies are required rather than defaulted so that this class
@@ -80,37 +88,13 @@ public final class TemperatureModel: ObservableObject {
     }
 
 #if DEBUG
-    /// Load a synthetic history so the UI can be rendered without an SMC.
-    func loadPreviewData(samples: Int = PreviewData.sampleCount) {
-        let now = Date()
-        var points: [HistoryPoint] = []
-        for index in 0..<samples {
-            let time = now.addingTimeInterval(Double(index - samples) * refreshPeriod)
-            let phase = Double(index) / Double(samples)
-            var values: [String: Double] = [:]
-            for wave in PreviewData.waves {
-                values[wave.name] = wave.value(inPhase: phase)
-            }
-            points.append(HistoryPoint(time: time, values: values))
-        }
-        history = points
-        lastUpdate = points.last?.time
-        snapshot = TemperatureSnapshot(
-            brand: brand,
-            groups: PreviewData.waves.dropLast().map {
-                GroupReading(
-                    name: $0.name,
-                    average: PreviewData.groupAverage,
-                    minimum: PreviewData.groupMinimum,
-                    maximum: PreviewData.groupMaximum,
-                    count: PreviewData.groupSensorCount
-                )
-            },
-            hottest: [
-                SensorReading(key: PreviewData.hottestKey, value: PreviewData.hottestValue)
-            ],
-            highest: PreviewData.hottestValue
-        )
+    /// Replace the published state with synthetic data, for rendering the views
+    /// without an SMC. It lives beside the stored properties so the DEBUG-only
+    /// preview file does not need access to their setters.
+    func adopt(history: [HistoryPoint], snapshot: TemperatureSnapshot?) {
+        self.history = history
+        self.lastUpdate = history.last?.time
+        self.snapshot = snapshot
     }
 #endif
 
@@ -156,40 +140,44 @@ public final class TemperatureModel: ObservableObject {
         source.resume()
     }
 
+    /// Gather one reading without publishing it: connect if needed, read the
+    /// key table, and turn it into a snapshot. Returns nil when the machine
+    /// exposes nothing to read, which is not an error.
+    ///
+    /// Not private so tests can assert on the reading itself rather than on the
+    /// published properties it feeds.
+    func readTick() throws -> Tick? {
+        let active: SMCSession
+        if let existing = session {
+            active = existing
+        } else {
+            let created = try SMCSession(connect: makeSMC)
+            session = created
+            active = created
+        }
+
+        let table = active.readTable()
+        guard !table.isEmpty else { return nil }
+
+        let snapshot = SensorCatalog.snapshot(brand: brand, table: table)
+        var values: [String: Double] = [:]
+        for group in snapshot.groups { values[group.name] = group.average }
+        if let highest = snapshot.highest {
+            values[SensorCatalog.hottestSeriesName] = highest
+        }
+        return Tick(snapshot: snapshot, point: HistoryPoint(time: Date(), values: values))
+    }
+
     /// One sampling tick. Not private so tests can drive it directly rather
     /// than waiting on the timer.
     func sample() {
         do {
-            let client: SMC
-            if let existing = smc {
-                client = existing
-            } else {
-                let created = try makeSMC()
-                meta = try created.collectTemperatureMeta()
-                smc = created
-                client = created
-            }
-
-            var table: [String: (format: String, raw: [UInt8], littleEndian: Bool)] = [:]
-            for (key, info) in meta {
-                if let raw = try? client.readValue(key, size: info.size) {
-                    table[key] = (info.format, raw, info.littleEndian)
-                }
-            }
-            guard !table.isEmpty else { return }
-
-            let snap = SensorCatalog.snapshot(brand: brand, table: table)
-            var values: [String: Double] = [:]
-            for group in snap.groups { values[group.name] = group.average }
-            if let highest = snap.highest {
-                values[SensorCatalog.hottestSeriesName] = highest
-            }
-            let point = HistoryPoint(time: Date(), values: values)
+            guard let tick = try readTick() else { return }
             deliver { [weak self] in
-                self?.apply(snapshot: snap, point: point)
+                self?.apply(snapshot: tick.snapshot, point: tick.point)
             }
         } catch {
-            smc = nil
+            session = nil
             deliver { [weak self] in
                 self?.errorMessage = "\(error)"
             }
@@ -206,46 +194,3 @@ public final class TemperatureModel: ObservableObject {
         }
     }
 }
-
-#if DEBUG
-/// Synthetic waveforms for `TemperatureModel.loadPreviewData()`.
-private enum PreviewData {
-    static let sampleCount = 150
-    static let groupAverage = 45.0
-    static let groupMinimum = 40.0
-    static let groupMaximum = 50.0
-    static let groupSensorCount = 4
-    static let hottestKey = "TCMb"
-    static let hottestValue = 76.0
-
-    /// One oscillating series: a sine or cosine of `quarterTurns` half-turns
-    /// across the span, added to `offset`. The last entry is the "Hottest
-    /// sensor" series, which is also the snapshot's top reading.
-    static let waves: [Wave] = [
-        Wave(
-            name: SensorCatalog.cpuOverallGroupName,
-            offset: 42, amplitude: 14, quarterTurns: 2, useCosine: false
-        ),
-        Wave(name: "GPU clusters", offset: 38, amplitude: 10, quarterTurns: 2, useCosine: true),
-        Wave(name: "Memory", offset: 40, amplitude: 6, quarterTurns: 4, useCosine: false),
-        Wave(name: "SoC package", offset: 34, amplitude: 3, quarterTurns: 3, useCosine: true),
-        Wave(
-            name: SensorCatalog.hottestSeriesName,
-            offset: 58, amplitude: 18, quarterTurns: 2, useCosine: false
-        ),
-    ]
-
-    struct Wave {
-        let name: String
-        let offset: Double
-        let amplitude: Double
-        let quarterTurns: Double
-        let useCosine: Bool
-
-        func value(inPhase phase: Double) -> Double {
-            let angle = phase * .pi * quarterTurns
-            return offset + amplitude * (useCosine ? cos(angle) : sin(angle))
-        }
-    }
-}
-#endif

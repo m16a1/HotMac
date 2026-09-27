@@ -34,8 +34,11 @@ name and rebuild to change it.
 `Sources/` is split into a data layer and a presentation layer:
 
 - `Sources/Sensors/` — `SMC.swift` (the protocol client, over an injected
-  transport), `Sensors.swift` (the key mapping and decoding),
-  `TemperatureModel.swift` (sampling, history).
+  transport), `SMCSession.swift` (one connection plus the key metadata read with
+  it), `Sensors.swift` (the key mapping and decoding), `SampleError.swift` (a
+  tick failure tagged with the stage that broke), `TemperatureModel.swift`
+  (gathering a reading, publishing it, history), plus the DEBUG-only
+  `PreviewData.swift` and `TemperatureModel+Preview.swift`.
 - `Sources/Sensors/System/` — the host boundary and the only code that touches
   the machine: `IOKitTransport.swift` (the kernel), `Sysctl.swift`, and
   `HostWiring.swift` (the composition root, `TemperatureModel.live()`). Excluded
