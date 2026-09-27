@@ -6,7 +6,8 @@ and lets you watch the individual component temperatures over time.
 - **Menu bar** shows the current highest reading, e.g. `58°C`, in plain text while
   the machine is cool and on a colored capsule once it passes 60 °C (yellow),
   80 °C (orange) and 95 °C (red).
-- **Menu** has exactly two items: `Show UI` and `Quit`.
+- **Menu** has three items: `Show UI`, `About HotMac` (a window with the app icon
+  at 512×512 px, the name, and the version), and `Quit`.
 - **UI**, a single window with two screens:
   - **Settings** — how often the sensors are sampled (default 2 s) and how many
     samples the graph keeps (default 900).
@@ -48,8 +49,8 @@ name and rebuild to change it.
   `HostWiring.swift` (the composition root, `TemperatureModel.live()`). Excluded
   from the coverage report, because it cannot run off real hardware.
 - `Sources/UI/` — `HotMacApp.swift` (the `@main` scene), `MenuBarBadge.swift`
-  (the menu bar label), `ContentView.swift` (the `TabView` shell),
-  `SettingsView.swift`, `GraphsView.swift`, `UI.swift`.
+  (the menu bar label), `AboutView.swift` (the About window), `ContentView.swift`
+  (the `TabView` shell), `SettingsView.swift`, `GraphsView.swift`, `UI.swift`.
 - `Tests/SensorsTests/` — the suite, one file per unit under test.
 - `build.py`, `test.py`, `Info.plist`, `AppIcon.png`, `Package.swift`.
 

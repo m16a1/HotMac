@@ -9,8 +9,14 @@ struct HotMacApp: App {
         static let title = "HotMac"
     }
 
+    private enum AboutWindow {
+        static let id = "about"
+        static let title = "About HotMac"
+    }
+
     private enum MenuLabels {
         static let showUI = "Show UI"
+        static let about = "About HotMac"
         static let quit = "Quit"
         static let quitShortcut: KeyEquivalent = "q"
     }
@@ -25,6 +31,10 @@ struct HotMacApp: App {
                 NSApp.activate(ignoringOtherApps: true)
             }
             Divider()
+            Button(MenuLabels.about) {
+                openWindow(id: AboutWindow.id)
+                NSApp.activate(ignoringOtherApps: true)
+            }
             Button(MenuLabels.quit) {
                 NSApplication.shared.terminate(nil)
             }
@@ -38,5 +48,10 @@ struct HotMacApp: App {
                 .environmentObject(model)
         }
         .defaultSize(width: UI.Layout.windowDefaultWidth, height: UI.Layout.windowDefaultHeight)
+
+        Window(AboutWindow.title, id: AboutWindow.id) {
+            AboutView()
+        }
+        .windowResizability(.contentSize)
     }
 }
