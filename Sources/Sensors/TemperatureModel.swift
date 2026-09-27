@@ -15,8 +15,8 @@ public final class TemperatureModel: ObservableObject {
 
     private static let queueLabel = "com.hotmac.smc"
     private static let timerLeeway = DispatchTimeInterval.milliseconds(200)
-    private static let menuBarPlaceholder = "--°"
-    private static let degreeSymbol = "°"
+    private static let celsiusSymbol = "°C"
+    private static let menuBarPlaceholder = "--\(TemperatureModel.celsiusSymbol)"
 
     /// How many samples the graph keeps before the oldest are dropped.
     static let maxHistory = 900
@@ -116,7 +116,7 @@ public final class TemperatureModel: ObservableObject {
 
     public var menuBarTitle: String {
         guard let highest = snapshot?.highest else { return TemperatureModel.menuBarPlaceholder }
-        return "\(Int(highest.rounded()))\(TemperatureModel.degreeSymbol)"
+        return "\(Int(highest.rounded()))\(TemperatureModel.celsiusSymbol)"
     }
 
     public var seriesNames: [String] {

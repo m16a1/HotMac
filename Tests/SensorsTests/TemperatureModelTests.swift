@@ -23,7 +23,7 @@ struct TemperatureModelTests {
         let model = model()
         #expect(model.snapshot == nil)
         #expect(model.seriesNames.isEmpty)
-        #expect(model.menuBarTitle == "--°")
+        #expect(model.menuBarTitle == "--°C")
     }
 
     @Test func aSampleIsPublished() {
@@ -35,7 +35,7 @@ struct TemperatureModelTests {
         #expect(model.lastUpdate != nil)
         #expect(model.errorMessage == nil)
         #expect(model.snapshot?.highest == 45.0)
-        #expect(model.menuBarTitle == "45°")
+        #expect(model.menuBarTitle == "45°C")
     }
 
     @Test func theSeriesAreTheGroupsPlusTheHotspot() {
@@ -178,7 +178,7 @@ struct TemperatureModelTests {
         let model = testModel()
         model.loadPreviewData()
 
-        #expect(model.menuBarTitle == "76°")
+        #expect(model.menuBarTitle == "76°C")
     }
     #endif
 }

@@ -3,7 +3,7 @@
 A tiny macOS menu bar app that shows the hottest temperature sensor on your Mac,
 and lets you watch the individual component temperatures over time.
 
-- **Menu bar** shows the current highest reading, e.g. `58°`.
+- **Menu bar** shows the current highest reading, e.g. `58°C`.
 - **Menu** has exactly two items: `Show UI` and `Quit`.
 - **UI**, a single window with two screens:
   - **Settings** — how often the sensors are sampled (default 2 s).
