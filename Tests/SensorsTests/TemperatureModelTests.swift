@@ -24,6 +24,7 @@ struct TemperatureModelTests {
         #expect(model.snapshot == nil)
         #expect(model.seriesNames.isEmpty)
         #expect(model.menuBarTitle == "--°C")
+        #expect(model.menuBarLevel == nil)
     }
 
     @Test func aSampleIsPublished() {
@@ -36,6 +37,18 @@ struct TemperatureModelTests {
         #expect(model.errorMessage == nil)
         #expect(model.snapshot?.highest == 45.0)
         #expect(model.menuBarTitle == "45°C")
+        #expect(model.menuBarLevel == .normal)
+    }
+
+    /// The band follows the reading, which is what lets the menu bar flag heat.
+    @Test func aHotReadingIsBanded() {
+        let hot = testModel(makeSMC: {
+            SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(88.0)]))
+        })
+        hot.sample()
+
+        #expect(hot.menuBarTitle == "88°C")
+        #expect(hot.menuBarLevel == .hot)
     }
 
     /// The reading can be gathered and inspected without publishing it.

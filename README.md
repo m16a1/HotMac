@@ -3,7 +3,9 @@
 A tiny macOS menu bar app that shows the hottest temperature sensor on your Mac,
 and lets you watch the individual component temperatures over time.
 
-- **Menu bar** shows the current highest reading, e.g. `58°C`.
+- **Menu bar** shows the current highest reading, e.g. `58°C`, in plain text while
+  the machine is cool and on a colored capsule once it passes 60 °C (yellow),
+  80 °C (orange) and 95 °C (red).
 - **Menu** has exactly two items: `Show UI` and `Quit`.
 - **UI**, a single window with two screens:
   - **Settings** — how often the sensors are sampled (default 2 s) and how many
@@ -36,7 +38,8 @@ name and rebuild to change it.
 
 - `Sources/Sensors/` — `SMC.swift` (the protocol client, over an injected
   transport), `SMCSession.swift` (one connection plus the key metadata read with
-  it), `Sensors.swift` (the key mapping and decoding), `SampleError.swift` (a
+  it), `Sensors.swift` (the key mapping and decoding), `TemperatureLevel.swift`
+  (the heat bands the menu bar flags), `SampleError.swift` (a
   tick failure tagged with the stage that broke), `TemperatureModel.swift`
   (gathering a reading, publishing it, history), plus the DEBUG-only
   `PreviewData.swift` and `TemperatureModel+Preview.swift`.
@@ -44,8 +47,9 @@ name and rebuild to change it.
   the machine: `IOKitTransport.swift` (the kernel), `Sysctl.swift`, and
   `HostWiring.swift` (the composition root, `TemperatureModel.live()`). Excluded
   from the coverage report, because it cannot run off real hardware.
-- `Sources/UI/` — `HotMacApp.swift` (the `@main` scene), `ContentView.swift`
-  (the `TabView` shell), `SettingsView.swift`, `GraphsView.swift`, `UI.swift`.
+- `Sources/UI/` — `HotMacApp.swift` (the `@main` scene), `MenuBarBadge.swift`
+  (the menu bar label), `ContentView.swift` (the `TabView` shell),
+  `SettingsView.swift`, `GraphsView.swift`, `UI.swift`.
 - `Tests/SensorsTests/` — the suite, one file per unit under test.
 - `build.py`, `test.py`, `Info.plist`, `AppIcon.png`, `Package.swift`.
 
@@ -104,6 +108,11 @@ table itself, the same way other macOS monitoring tools do.
   real sensors and would pin the menu bar at a constant 61 °C. Any reading
   outside 5–120 °C is dropped too, which removes unpopulated slots that read
   exactly 0.
+- The menu bar emphasizes the reading by band, using the thresholds in
+  `Sources/Sensors/TemperatureLevel.swift`: plain text below 60 °C, then a
+  yellow, orange and red capsule. The label is drawn by `MenuBarBadge` and given
+  to the system as an image, because a menu bar extra renders its label as a
+  monochrome template image, which discards any tint applied to the text.
 
 ## Limitations
 

@@ -30,8 +30,7 @@ struct HotMacApp: App {
             }
             .keyboardShortcut(MenuLabels.quitShortcut)
         } label: {
-            Text(model.menuBarTitle)
-                .monospacedDigit()
+            MenuBarBadge(title: model.menuBarTitle, level: model.menuBarLevel)
         }
 
         Window(MainWindow.title, id: MainWindow.id) {

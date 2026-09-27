@@ -113,6 +113,13 @@ public final class TemperatureModel: ObservableObject {
         return "\(Int(highest.rounded()))\(TemperatureModel.celsiusSymbol)"
     }
 
+    /// The band the current reading falls in, so the menu bar can emphasize a
+    /// hot machine without knowing the thresholds. Nil until a reading arrives.
+    public var menuBarLevel: TemperatureLevel? {
+        guard let highest = snapshot?.highest else { return nil }
+        return TemperatureLevel.level(for: highest)
+    }
+
     public var seriesNames: [String] {
         var names = snapshot?.groups.map(\.name) ?? []
         if snapshot?.highest != nil {
