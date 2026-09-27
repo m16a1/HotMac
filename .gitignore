@@ -1,0 +1,11 @@
+# Build output
+HotMac.app/
+
+# Xcode / Swift
+*.o
+*.dSYM/
+.swiftpm/
+build/
+
+# macOS
+.DS_Store
