@@ -1,5 +1,19 @@
 import Foundation
-import IOKit
+
+/// The one kernel interaction the SMC client needs: hand it a request struct
+/// and get the response bytes back.
+///
+/// `IOKitTransport` is the real implementation and the only file that talks to
+/// the kernel. This seam exists so the protocol logic below can be exercised
+/// without hardware.
+protocol SMCTransport: AnyObject {
+    /// Send one request and return the response. The kernel requires the
+    /// response buffer to be the same length as the request.
+    func call(request: [UInt8]) throws -> [UInt8]
+
+    /// Release the underlying connection.
+    func close()
+}
 
 /// Client for the AppleSMCKeysEndpoint IOKit user client.
 ///
@@ -34,8 +48,12 @@ final class SMC {
         }
     }
 
+    /// Every temperature sensor is a key beginning with this character.
+    static let temperaturePrefix = "T"
+
     private static let structSize = 80
     private static let valueMax = 32
+    private static let fourccLength = 4
 
     private static let sizeOff = 28
     private static let typeOff = 32
@@ -50,29 +68,12 @@ final class SMC {
     private static let opKeyFromIndex: UInt8 = 8
     private static let opKeyInfo: UInt8 = 9
 
-    private static let selBegin: UInt32 = 0
-    private static let selEnd: UInt32 = 1
-    private static let selOperation: UInt32 = 2
-
     private static let emptyRun = 32
 
-    private var service: io_service_t = 0
-    private var connection: io_connect_t = 0
+    private let transport: SMCTransport
 
-    init() throws {
-        guard let matching = IOServiceMatching("AppleSMC") else {
-            throw SMCError.serviceNotFound
-        }
-        let svc = IOServiceGetMatchingService(kIOMainPortDefault, matching)
-        guard svc != 0 else { throw SMCError.serviceNotFound }
-        var conn: io_connect_t = 0
-        let kr = IOServiceOpen(svc, mach_task_self_, 0, &conn)
-        guard kr == KERN_SUCCESS else {
-            IOObjectRelease(svc)
-            throw SMCError.openFailed(kr)
-        }
-        self.service = svc
-        self.connection = conn
+    init(transport: SMCTransport) {
+        self.transport = transport
     }
 
     deinit {
@@ -80,18 +81,11 @@ final class SMC {
     }
 
     func close() {
-        if connection != 0 {
-            IOServiceClose(connection)
-            connection = 0
-        }
-        if service != 0 {
-            IOObjectRelease(service)
-            service = 0
-        }
+        transport.close()
     }
 
     /// Walk the key table and return the size/format/endianness of every key
-    /// beginning with "T", which is every temperature sensor.
+    /// beginning with `temperaturePrefix`, which is every temperature sensor.
     ///
     /// The value size is discovered first because the kernel rejects a read
     /// whose declared size does not match the key, and it also requires the
@@ -108,7 +102,7 @@ final class SMC {
                 continue
             }
             empties = 0
-            guard name.hasPrefix("T") else { continue }
+            guard name.hasPrefix(Self.temperaturePrefix) else { continue }
             if let info = try? keyInfo(name) {
                 meta[name] = info
             }
@@ -119,7 +113,7 @@ final class SMC {
     func indexKey(_ index: UInt32) throws -> String? {
         let out = try call(op: Self.opKeyFromIndex, index: index)
         guard out.count > Self.resultOff, out[Self.resultOff] == 0 else { return nil }
-        let raw = Array(out[0..<4])
+        let raw = Array(out[0..<Self.fourccLength])
         if raw.allSatisfy({ $0 == 0 }) { return nil }
         return Self.decodeFourCC(raw)
     }
@@ -129,8 +123,8 @@ final class SMC {
         guard out.count > Self.resultOff, out[Self.resultOff] == 0 else {
             throw SMCError.message("key \(key): SMC error")
         }
-        let size = Self.readU32(out, Self.sizeOff, true)
-        let format = Self.decodeFourCC(Array(out[Self.typeOff..<(Self.typeOff + 4)]))
+        let size = Self.readU32(out, Self.sizeOff)
+        let format = Self.decodeFourCC(Array(out[Self.typeOff..<(Self.typeOff + Self.fourccLength)]))
         let littleEndian = (out[Self.attrOff] & Self.littleEndianBit) != 0
         return KeyInfo(size: size, format: format, littleEndian: littleEndian)
     }
@@ -145,6 +139,7 @@ final class SMC {
         return Array(out[Self.bytesOff..<(Self.bytesOff + Int(size))])
     }
 
+    /// Build the request struct and hand it to the transport.
     private func call(
         op: UInt8,
         key: String? = nil,
@@ -155,7 +150,7 @@ final class SMC {
         var input = [UInt8](repeating: 0, count: structSize)
         if let key = key {
             let bytes = Array(key.utf8)
-            guard bytes.count == 4 else {
+            guard bytes.count == Self.fourccLength else {
                 throw SMCError.message("key must be exactly 4 characters: \(key)")
             }
             // Four-character codes are stored byte-reversed.
@@ -168,26 +163,7 @@ final class SMC {
         if let dataSize = dataSize { Self.writeU32(&input, Self.sizeOff, dataSize) }
         input[Self.data8Off] = op
 
-        var output = [UInt8](repeating: 0, count: structSize)
-        var outSize = structSize
-
-        _ = IOConnectCallMethod(connection, Self.selBegin, nil, 0, nil, 0, nil, nil, nil, nil)
-        let kr = input.withUnsafeBytes { inPtr -> kern_return_t in
-            output.withUnsafeMutableBytes { outPtr -> kern_return_t in
-                IOConnectCallStructMethod(
-                    connection,
-                    Self.selOperation,
-                    inPtr.baseAddress,
-                    structSize,
-                    outPtr.baseAddress,
-                    &outSize
-                )
-            }
-        }
-        _ = IOConnectCallMethod(connection, Self.selEnd, nil, 0, nil, 0, nil, nil, nil, nil)
-
-        guard kr == KERN_SUCCESS else { throw SMCError.operationFailed(kr) }
-        return Array(output[0..<outSize])
+        return try transport.call(request: input)
     }
 
     private static func writeU32(_ buffer: inout [UInt8], _ offset: Int, _ value: UInt32) {
@@ -197,23 +173,25 @@ final class SMC {
         buffer[offset + 3] = UInt8((value >> 24) & 0xff)
     }
 
-    private static func readU32(_ buffer: [UInt8], _ offset: Int, _ littleEndian: Bool) -> UInt32 {
-        if littleEndian {
-            return UInt32(buffer[offset])
-                | (UInt32(buffer[offset + 1]) << 8)
-                | (UInt32(buffer[offset + 2]) << 16)
-                | (UInt32(buffer[offset + 3]) << 24)
-        }
-        return (UInt32(buffer[offset]) << 24)
-            | (UInt32(buffer[offset + 1]) << 16)
-            | (UInt32(buffer[offset + 2]) << 8)
-            | UInt32(buffer[offset + 3])
+    /// The struct's size field is a host-order u32. Every Apple SoC is
+    /// little-endian, and the per-key attribute byte governs only the *value*
+    /// byte order, never the struct fields.
+    private static func readU32(_ buffer: [UInt8], _ offset: Int) -> UInt32 {
+        UInt32(buffer[offset])
+            | (UInt32(buffer[offset + 1]) << 8)
+            | (UInt32(buffer[offset + 2]) << 16)
+            | (UInt32(buffer[offset + 3]) << 24)
     }
 
-    private static func decodeFourCC(_ raw: [UInt8]) -> String {
-        guard raw.count == 4 else { return "" }
-        let reversed = [raw[3], raw[2], raw[1], raw[0]]
-        return String(bytes: reversed, encoding: .isoLatin1) ?? ""
+    /// Internal rather than private so the malformed-input branch can be
+    /// tested; a four-character code must survive a round trip through a
+    /// byte-reversed wire format.
+    ///
+    /// Built from Unicode scalars because Latin-1 maps byte-for-byte onto
+    /// U+0000...U+00FF, which is what the C side sees.
+    static func decodeFourCC(_ raw: [UInt8]) -> String {
+        guard raw.count == SMC.fourccLength else { return "" }
+        return String(raw.reversed().map { Character(UnicodeScalar($0)) })
     }
 
     private static func kernName(_ kr: kern_return_t) -> String {

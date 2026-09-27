@@ -1,31 +1,43 @@
 import SwiftUI
 import AppKit
+import Sensors
 
 @main
 struct HotMacApp: App {
-    @StateObject private var model = TemperatureModel()
+    private enum MainWindow {
+        static let id = "main"
+        static let title = "HotMac"
+    }
+
+    private enum MenuLabels {
+        static let showUI = "Show UI"
+        static let quit = "Quit"
+        static let quitShortcut: KeyEquivalent = "q"
+    }
+
+    @StateObject private var model = TemperatureModel.live()
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         MenuBarExtra {
-            Button("Show UI") {
-                openWindow(id: "main")
+            Button(MenuLabels.showUI) {
+                openWindow(id: MainWindow.id)
                 NSApp.activate(ignoringOtherApps: true)
             }
             Divider()
-            Button("Quit") {
+            Button(MenuLabels.quit) {
                 NSApplication.shared.terminate(nil)
             }
-            .keyboardShortcut("q")
+            .keyboardShortcut(MenuLabels.quitShortcut)
         } label: {
             Text(model.menuBarTitle)
                 .monospacedDigit()
         }
 
-        Window("HotMac", id: "main") {
+        Window(MainWindow.title, id: MainWindow.id) {
             ContentView()
                 .environmentObject(model)
         }
-        .defaultSize(width: 760, height: 520)
+        .defaultSize(width: UI.Layout.windowDefaultWidth, height: UI.Layout.windowDefaultHeight)
     }
 }

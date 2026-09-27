@@ -5,6 +5,7 @@ HotMac.app/
 *.o
 *.dSYM/
 .swiftpm/
+.build/
 build/
 
 # macOS

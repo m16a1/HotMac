@@ -14,11 +14,11 @@ struct GroupReading: Identifiable {
     let count: Int
 }
 
-struct TemperatureSnapshot {
-    let brand: String
+public struct TemperatureSnapshot {
+    public let brand: String
     let groups: [GroupReading]
     let hottest: [SensorReading]
-    let highest: Double?
+    public let highest: Double?
 }
 
 /// Maps SMC temperature keys to named components and builds a report.
@@ -28,11 +28,29 @@ struct TemperatureSnapshot {
 /// Apple reuses "Tp"/"Te"/"Tf" for different blocks across generations;
 /// everything else is prefix-based and stable ("Tg*" is the GPU on every
 /// Apple SoC, "Tm*" memory, "TUD*" uncore, "TN*" package).
-enum SensorCatalog {
+public enum SensorCatalog {
     static let tempMin = 5.0
     static let tempMax = 120.0
     static let hotspots = 5
-    static let hottestSeriesName = "Hottest sensor"
+    public static let hottestSeriesName = "Hottest sensor"
+
+    /// Group label for the combined CPU groups, and the fallback used when the
+    /// chip is unknown. Both are referenced by the UI, so they live here rather
+    /// than as inline strings.
+    public static let cpuOverallGroupName = "CPU overall"
+    static let cpuFallbackGroupName = "CPU (Tp sensors)"
+
+    /// Shown when the CPU brand string cannot be read.
+    static let unknownChipName = "unknown chip"
+
+    /// `flt` is a 32-bit float; `sp`/`fp` are 8.8 fixed-point values that encode
+    /// eighths, so the raw integer is scaled by this.
+    private static let floatFormat = "flt"
+    private static let fixedPointPrefixes = ["sp", "fp"]
+    private static let fixedPointDivisor = 256.0
+
+    private static let appleBrandPrefix = "Apple "
+    private static let cpuFallbackPrefix = "Tp"
 
     /// The GPU fabric "Min"/"Max" slots (Tf?5/Tf?6) hold each fabric block's
     /// minimum and maximum, not a point reading (iSMC names them "GPU Fabric
@@ -117,24 +135,20 @@ enum SensorCatalog {
         ("Airflow", ["TaLP", "TaRF"]),
     ]
 
-    static func chipBrand() -> String {
-        sysctlString("machdep.cpu.brand_string") ?? "unknown chip"
+    /// Normalise a raw sysctl brand string into the name to report.
+    ///
+    /// The syscall itself lives in `System/Sysctl.swift`; this stays pure so
+    /// both outcomes are testable.
+    static func chipBrand(fromSysctl value: String?) -> String {
+        value ?? unknownChipName
     }
 
     static func chipFamily(_ brand: String) -> String? {
         for family in ["M1", "M2", "M3", "M4", "M5"] {
-            if brand.hasPrefix("Apple \(family)") { return family }
+            if brand.hasPrefix(appleBrandPrefix + family) { return family }
         }
         if brand.contains("A18") { return "A18" }
         return nil
-    }
-
-    static func sysctlString(_ name: String) -> String? {
-        var size = 0
-        guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 0 else { return nil }
-        var buffer = [CChar](repeating: 0, count: size)
-        guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
-        return String(cString: buffer)
     }
 
     static func snapshot(
@@ -145,9 +159,11 @@ enum SensorCatalog {
         var groups: [(String, [String])] = []
         if let cpu = chipCPUGroups[family ?? ""] {
             groups.append(contentsOf: cpu)
-            groups.append(("CPU overall", cpu.flatMap { $0.1 }))
+            groups.append((cpuOverallGroupName, cpu.flatMap { $0.1 }))
         } else {
-            groups.append(("CPU (Tp sensors)", table.keys.filter { $0.hasPrefix("Tp") }.sorted()))
+            groups.append(
+                (cpuFallbackGroupName, table.keys.filter { $0.hasPrefix(cpuFallbackPrefix) }.sorted())
+            )
         }
         for (label, prefix) in prefixGroups {
             groups.append((label, table.keys.filter { $0.hasPrefix(prefix) }.sorted()))
@@ -157,14 +173,17 @@ enum SensorCatalog {
         var resolved: [GroupReading] = []
         for (label, keys) in groups {
             let readings = plausible(table, keys)
-            guard !readings.isEmpty else { continue }
+            guard let first = readings.first else { continue }
             let values = readings.map(\.value)
             resolved.append(
                 GroupReading(
                     name: label,
                     average: values.reduce(0, +) / Double(values.count),
-                    minimum: values.min() ?? 0,
-                    maximum: values.max() ?? 0,
+                    // Folded from the first reading rather than min()/max(),
+                    // which would need a fallback for an empty array that the
+                    // guard above already rules out.
+                    minimum: values.reduce(first.value, Swift.min),
+                    maximum: values.reduce(first.value, Swift.max),
                     count: values.count
                 )
             )
@@ -172,7 +191,7 @@ enum SensorCatalog {
 
         var hottest: [SensorReading] = []
         for (key, entry) in table {
-            guard key.hasPrefix("T"), !excludedTempKeys.contains(key) else { continue }
+            guard key.hasPrefix(SMC.temperaturePrefix), !excludedTempKeys.contains(key) else { continue }
             guard let value = decodeValue(
                 format: entry.format, raw: entry.raw, littleEndian: entry.littleEndian
             ) else { continue }
@@ -208,14 +227,13 @@ enum SensorCatalog {
 
     static func decodeValue(format: String, raw: [UInt8], littleEndian: Bool) -> Double? {
         let f = format.trimmingCharacters(in: .whitespaces).lowercased()
-        if f.hasPrefix("flt"), raw.count >= 4 {
+        if f.hasPrefix(floatFormat), raw.count >= 4 {
             return Double(Float(bitPattern: readU32(raw, 0, littleEndian)))
         }
-        if f.hasPrefix("sp") || f.hasPrefix("fp") {
+        if fixedPointPrefixes.contains(where: f.hasPrefix) {
             let digits = f.dropFirst(2)
             if !digits.isEmpty, Int(digits) != nil, raw.count >= 2 {
-                // Fixed-point formats such as sp78/fp68 encode eighths.
-                return Double(Int16(bitPattern: readU16(raw, 0, littleEndian))) / 256.0
+                return Double(Int16(bitPattern: readU16(raw, 0, littleEndian))) / fixedPointDivisor
             }
         }
         switch f {

@@ -1,13 +1,21 @@
 import SwiftUI
+import Sensors
 
 struct ContentView: View {
+    private enum Tab {
+        static let settingsTitle = "Settings"
+        static let settingsIcon = "gearshape"
+        static let graphsTitle = "Graphs"
+        static let graphsIcon = "chart.xyaxis.line"
+    }
+
     var body: some View {
         TabView {
             SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tabItem { Label(Tab.settingsTitle, systemImage: Tab.settingsIcon) }
             GraphsView()
-                .tabItem { Label("Graphs", systemImage: "chart.xyaxis.line") }
+                .tabItem { Label(Tab.graphsTitle, systemImage: Tab.graphsIcon) }
         }
-        .frame(minWidth: 700, minHeight: 480)
+        .frame(minWidth: UI.Layout.windowMinWidth, minHeight: UI.Layout.windowMinHeight)
     }
 }
