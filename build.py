@@ -5,11 +5,17 @@ SwiftPM does the compiling, so the app and the test suite share one definition
 (Package.swift). This script only wraps the binary it produces: Info.plist, the
 app icon, and an ad-hoc signature. Needs the Xcode Command Line Tools, which
 provide swiftc and this interpreter.
+
+With --dist it also zips the bundle for a GitHub release, as
+dist/HotMac-<version>.zip. The app is not notarized, so a downloaded copy needs
+one Gatekeeper step to open; the README explains that.
 """
 
 from __future__ import annotations
 
+import argparse
 import pathlib
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -100,7 +106,35 @@ def build_icon() -> None:
     shutil.rmtree(iconset)
 
 
+def app_version() -> str:
+    """The version stamped into the bundle, so the zip matches the About window."""
+    with (ROOT / "Info.plist").open("rb") as handle:
+        return plistlib.load(handle)["CFBundleShortVersionString"]
+
+
+def make_dist() -> pathlib.Path:
+    """Zip the built bundle for a release and return the archive path.
+
+    `ditto` is used instead of `zip` because it preserves the bundle's metadata,
+    which a plain zip drops and which the ad-hoc signature covers.
+    """
+    dist = ROOT / "dist"
+    dist.mkdir(exist_ok=True)
+    archive = dist / f"HotMac-{app_version()}.zip"
+    archive.unlink(missing_ok=True)
+    run_quietly(["ditto", "-c", "-k", "--keepParent", str(APP), str(archive)])
+    return archive
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--dist",
+        action="store_true",
+        help="also zip the app for a release (dist/HotMac-<version>.zip)",
+    )
+    args = parser.parse_args()
+
     binary = product_binary()
 
     shutil.rmtree(APP, ignore_errors=True)
@@ -117,6 +151,8 @@ def main() -> int:
     print(f"Built {APP}")
     print(f'Run:  open "{APP}"')
     print("Stop: pkill -x HotMac")
+    if args.dist:
+        print(f"Release: {make_dist()}")
     return 0
 
 

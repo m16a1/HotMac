@@ -20,6 +20,34 @@ and lets you watch the individual component temperatures over time.
     and a Clear button. Hovering a series explains what that sensor measures,
     and the checked series are remembered between launches.
 
+## Install
+
+Two free ways. The app is ad-hoc signed but **not notarized** — there is no paid
+Apple Developer certificate behind it — so a downloaded copy needs a one-time
+Gatekeeper step.
+
+**Build from source (no warnings).** A locally built app is never quarantined:
+
+```bash
+./build.py
+open HotMac.app
+```
+
+**Download a release.** Grab `HotMac-<version>.zip` from Releases, unzip it, and
+move `HotMac.app` into Applications. On first launch macOS refuses to open it,
+because it cannot check the developer. Clear the quarantine flag once, either in
+Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/HotMac.app
+```
+
+or in the GUI: try to open it, then **System Settings → Privacy & Security →
+Open Anyway**. The old right-click → Open shortcut no longer bypasses this for
+unnotarized apps on macOS 15 and later.
+
+It is not in Homebrew; build from source or use a release.
+
 ## Requirements
 
 - macOS 14 or later on Apple silicon.
@@ -142,6 +170,21 @@ table itself, the same way other macOS monitoring tools do.
   release. Verified on macOS 26 on an M5 Max.
 - The named HID sensors that some tools show (for example "NAND CH0 temp")
   return -1 to unprivileged processes, so they are not used.
+
+## Releasing
+
+The version lives in `Info.plist` (`CFBundleShortVersionString`). To cut a
+release, bump it, commit, and push a matching tag:
+
+```bash
+./build.py --dist   # writes dist/HotMac-<version>.zip
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The `Release` GitHub Actions workflow (`.github/workflows/release.yml`) runs
+`./build.py --dist` on the tag and attaches the zip to a new release. Nothing is
+signed or notarized, so it needs no secrets.
 
 ## License
 

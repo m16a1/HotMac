@@ -1,0 +1,29 @@
+name: Release
+
+# Pushing a version tag (for example `v0.1.0`) builds the app and attaches the
+# release zip to a GitHub release. The app is ad-hoc signed, not notarized, so
+# there is nothing to sign here and no secrets to configure.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and package
+        run: ./build.py --dist
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/HotMac-*.zip \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

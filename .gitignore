@@ -1,5 +1,6 @@
 # Build output
 HotMac.app/
+dist/
 
 # Xcode / Swift
 *.o

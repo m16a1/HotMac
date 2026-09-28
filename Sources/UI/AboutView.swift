@@ -8,6 +8,10 @@ struct AboutView: View {
         /// 256 pt is 512 px on a Retina display. The `.icns` carries up to
         /// 1024 px, so the icon stays sharp.
         static let iconSize: CGFloat = 256
+        /// Apple draws macOS icons on a superellipse whose corner radius is
+        /// about 22.37% of the edge; this uses half of that, which reads
+        /// subtler on the full-bleed square source image.
+        static let iconCornerRadius: CGFloat = iconSize * 0.11185
         static let fallbackIconSize: CGFloat = 128
         static let windowWidth: CGFloat = 360
         static let padding: CGFloat = 32
@@ -49,6 +53,12 @@ struct AboutView: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: Metrics.iconSize, height: Metrics.iconSize)
+                .clipShape(
+                    RoundedRectangle(
+                        cornerRadius: Metrics.iconCornerRadius,
+                        style: .continuous
+                    )
+                )
         } else {
             Image(systemName: "thermometer.medium")
                 .resizable()
