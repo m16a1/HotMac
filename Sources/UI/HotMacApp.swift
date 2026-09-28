@@ -15,20 +15,19 @@ struct HotMacApp: App {
     }
 
     private enum MenuLabels {
-        static let showUI = "Show UI"
         static let about = "About HotMac"
         static let quit = "Quit"
         static let quitShortcut: KeyEquivalent = "q"
     }
 
     @StateObject private var model = TemperatureModel.live()
+    @State private var selection: WindowTab = .temperatures
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
         MenuBarExtra {
-            Button(MenuLabels.showUI) {
-                openWindow(id: MainWindow.id)
-                NSApp.activate(ignoringOtherApps: true)
+            ForEach(WindowTab.allCases) { tab in
+                Button(tab.title) { show(tab) }
             }
             Divider()
             Button(MenuLabels.about) {
@@ -44,7 +43,7 @@ struct HotMacApp: App {
         }
 
         Window(MainWindow.title, id: MainWindow.id) {
-            ContentView()
+            ContentView(selection: $selection)
                 .environmentObject(model)
         }
         .defaultSize(width: UI.Layout.windowDefaultWidth, height: UI.Layout.windowDefaultHeight)
@@ -53,5 +52,12 @@ struct HotMacApp: App {
             AboutView()
         }
         .windowResizability(.contentSize)
+    }
+
+    /// Show one screen of the main window, opening the window if it is closed.
+    private func show(_ tab: WindowTab) {
+        selection = tab
+        openWindow(id: MainWindow.id)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

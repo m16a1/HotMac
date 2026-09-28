@@ -6,8 +6,9 @@ and lets you watch the individual component temperatures over time.
 - **Menu bar** shows the current highest reading, e.g. `58°C`, in plain text while
   the machine is cool and on a colored capsule once it passes 60 °C (yellow),
   80 °C (orange) and 95 °C (red).
-- **Menu** has three items: `Show UI`, `About HotMac` (a window with the app icon
-  at 512×512 px, the name, and the version), and `Quit`.
+- **Menu** lists the three screens — `Temperatures`, `Fans` and `Settings` — each
+  opening the window straight to it, then `About HotMac` (a window with the app
+  icon at 512×512 px, the name, and the version) and `Quit`.
 - **UI**, a single window with three screens:
   - **Settings** — how often the sensors are sampled (default 2 s), how many
     samples the graph keeps (default 900), and a status section (chip, highest,

@@ -2,23 +2,21 @@ import SwiftUI
 import Sensors
 
 struct ContentView: View {
-    private enum Tab {
-        static let graphsTitle = "Temperatures"
-        static let graphsIcon = "chart.xyaxis.line"
-        static let fansTitle = "Fans"
-        static let fansIcon = "fan"
-        static let settingsTitle = "Settings"
-        static let settingsIcon = "gearshape"
-    }
+    /// Which screen the window shows. Owned by the app so the menu bar menu can
+    /// switch to one before the window is even open.
+    @Binding var selection: WindowTab
 
     var body: some View {
-        TabView {
+        TabView(selection: $selection) {
             GraphsView()
-                .tabItem { Label(Tab.graphsTitle, systemImage: Tab.graphsIcon) }
+                .tabItem { Label(WindowTab.temperatures.title, systemImage: WindowTab.temperatures.icon) }
+                .tag(WindowTab.temperatures)
             FansView()
-                .tabItem { Label(Tab.fansTitle, systemImage: Tab.fansIcon) }
+                .tabItem { Label(WindowTab.fans.title, systemImage: WindowTab.fans.icon) }
+                .tag(WindowTab.fans)
             SettingsView()
-                .tabItem { Label(Tab.settingsTitle, systemImage: Tab.settingsIcon) }
+                .tabItem { Label(WindowTab.settings.title, systemImage: WindowTab.settings.icon) }
+                .tag(WindowTab.settings)
         }
         .frame(minWidth: UI.Layout.windowMinWidth, minHeight: UI.Layout.windowMinHeight)
     }
