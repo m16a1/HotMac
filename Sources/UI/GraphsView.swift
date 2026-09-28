@@ -46,6 +46,7 @@ struct GraphsView: View {
             ForEach(model.seriesNames, id: \.self) { name in
                 Toggle(name, isOn: binding(for: name))
                     .toggleStyle(.checkbox)
+                    .help(SensorCatalog.description(for: name))
             }
             Spacer(minLength: 0)
         }

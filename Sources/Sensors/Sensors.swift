@@ -57,6 +57,72 @@ public enum SensorCatalog {
         return preferred.isEmpty ? Set(names.prefix(initialSeriesCount)) : Set(preferred)
     }
 
+    /// What each component group actually is, keyed by the label the catalog
+    /// What each component group actually is, keyed by the label the catalog
+    /// gives it, for the graph's hover hints. Written for someone who owns the
+    /// Mac rather than someone who knows the SMC key names; the key families are
+    /// documented in AGENTS.md and `SENSORS.md` instead. Kept apart from the
+    /// mapping tables above because those mirror `smc.py`, which has no such
+    /// text.
+    public static let groupDescriptions: [String: String] = [
+        "CPU efficiency cores":
+            "The low-power CPU cores. They do light background work, so they are "
+            + "usually the coolest part of the CPU.",
+        "CPU performance cores":
+            "The main CPU cores. They do the heavy work, so they heat up first "
+            + "when something is busy.",
+        "CPU super cores":
+            "This chip's fastest CPU cores. They take the most demanding work, "
+            + "so they swing the widest.",
+        cpuOverallGroupName:
+            "Every CPU core in one line, all types together. Handy for seeing "
+            + "the CPU as a whole.",
+        cpuFallbackGroupName:
+            "Every CPU temperature this Mac reports, averaged into one line. "
+            + "This chip's cores are not split out individually.",
+        "GPU clusters":
+            "The graphics processor. This is the one to watch for games, video "
+            + "and anything else using the GPU.",
+        "CPU die":
+            "Heat in the CPU chip itself rather than in a single core, so it "
+            + "changes more slowly.",
+        "CPU die aggregate":
+            "One temperature for the whole CPU chip, measured inside it.",
+        "Virtual die":
+            "Power-supply sensors inside the chip. They read hotter than the "
+            + "chip does by design, so a high number here is normal.",
+        "Uncore die":
+            "The parts of the chip that are not cores: its caches and internal "
+            + "connections.",
+        "Memory":
+            "The unified memory chips. Heavy multitasking and large files warm "
+            + "them up.",
+        "SoC package":
+            "The processor package as a whole, in a single reading.",
+        "NAND (SSD)":
+            "The SSD's storage chips. Long or heavy disk use heats them.",
+        "SSD controller":
+            "The chip inside the SSD that drives it. It warms up under heavy "
+            + "disk use.",
+        "Battery":
+            "The battery pack's own temperature. It rises while charging.",
+        "WiFi / Airport":
+            "The wireless chip, which warms up while transferring.",
+        "Airflow":
+            "The air around the machine at its vents, not the chip. This is "
+            + "roughly how warm your surroundings are.",
+    ]
+
+    /// Shown for a group this build has no description for, which is what an
+    /// unknown chip's prefix grouping can produce.
+    public static let unknownGroupDescription =
+        "A part of this Mac that this version has no description for."
+
+    /// What to show when the user hovers a series, by its group label.
+    public static func description(for group: String) -> String {
+        groupDescriptions[group] ?? unknownGroupDescription
+    }
+
     /// Shown when the CPU brand string cannot be read.
     static let unknownChipName = "unknown chip"
 

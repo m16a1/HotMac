@@ -17,7 +17,8 @@ and lets you watch the individual component temperatures over time.
     speed and reported range for each fan.
   - **Temperatures** — a live chart of the component temperatures (CPU, GPU,
     memory, SSD, battery, ...), one color per series, with a checkbox per series
-    and a Clear button. The checked series are remembered between launches.
+    and a Clear button. Hovering a series explains what that sensor measures,
+    and the checked series are remembered between launches.
 
 ## Requirements
 
