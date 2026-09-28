@@ -6,9 +6,10 @@ SwiftPM does the compiling, so the app and the test suite share one definition
 app icon, and an ad-hoc signature. Needs the Xcode Command Line Tools, which
 provide swiftc and this interpreter.
 
-With --dist it also zips the bundle for a GitHub release, as
-dist/HotMac-<version>.zip. The app is not notarized, so a downloaded copy needs
-one Gatekeeper step to open; the README explains that.
+With --dist it also packages the bundle for a GitHub release, as
+dist/HotMac-<version>.zip and a drag-to-Applications .dmg. The app is not
+notarized, so a downloaded copy needs one Gatekeeper step to open; the README
+explains that.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent
 PRODUCT = "HotMac"
@@ -107,23 +109,62 @@ def build_icon() -> None:
 
 
 def app_version() -> str:
-    """The version stamped into the bundle, so the zip matches the About window."""
+    """The version stamped into the bundle, so the archives match the About window."""
     with (ROOT / "Info.plist").open("rb") as handle:
         return plistlib.load(handle)["CFBundleShortVersionString"]
 
 
-def make_dist() -> pathlib.Path:
-    """Zip the built bundle for a release and return the archive path.
+def dist_directory() -> pathlib.Path:
+    """The gitignored directory the release archives are written to."""
+    dist = ROOT / "dist"
+    dist.mkdir(exist_ok=True)
+    return dist
+
+
+def make_zip() -> pathlib.Path:
+    """Zip the built bundle and return the archive path.
 
     `ditto` is used instead of `zip` because it preserves the bundle's metadata,
     which a plain zip drops and which the ad-hoc signature covers.
     """
-    dist = ROOT / "dist"
-    dist.mkdir(exist_ok=True)
-    archive = dist / f"HotMac-{app_version()}.zip"
+    archive = dist_directory() / f"HotMac-{app_version()}.zip"
     archive.unlink(missing_ok=True)
     run_quietly(["ditto", "-c", "-k", "--keepParent", str(APP), str(archive)])
     return archive
+
+
+def make_dmg() -> pathlib.Path:
+    """Wrap the built bundle in a drag-to-Applications disk image.
+
+    The staging folder holds the app and a symlink to /Applications, so the
+    mounted image shows the usual drag target. hdiutil ships with macOS, so the
+    image needs no third-party tool.
+    """
+    archive = dist_directory() / f"HotMac-{app_version()}.dmg"
+    archive.unlink(missing_ok=True)
+    with tempfile.TemporaryDirectory(prefix="hotmac-dmg-") as staging:
+        stage = pathlib.Path(staging)
+        run_quietly(["ditto", str(APP), str(stage / APP.name)])
+        (stage / "Applications").symlink_to("/Applications")
+        run_quietly(
+            [
+                "hdiutil",
+                "create",
+                "-volname", "HotMac",
+                "-srcfolder",
+                str(stage),
+                "-ov",
+                "-format",
+                "UDZO",
+                str(archive),
+            ]
+        )
+    return archive
+
+
+def make_dist() -> list[pathlib.Path]:
+    """Build every release archive and return their paths."""
+    return [make_zip(), make_dmg()]
 
 
 def main() -> int:
@@ -131,7 +172,7 @@ def main() -> int:
     parser.add_argument(
         "--dist",
         action="store_true",
-        help="also zip the app for a release (dist/HotMac-<version>.zip)",
+        help="also package the app for a release (dist/HotMac-<version>.zip and .dmg)",
     )
     args = parser.parse_args()
 
@@ -152,7 +193,8 @@ def main() -> int:
     print(f'Run:  open "{APP}"')
     print("Stop: pkill -x HotMac")
     if args.dist:
-        print(f"Release: {make_dist()}")
+        for archive in make_dist():
+            print(f"Release: {archive}")
     return 0
 
 

@@ -33,10 +33,11 @@ Gatekeeper step.
 open HotMac.app
 ```
 
-**Download a release.** Grab `HotMac-<version>.zip` from Releases, unzip it, and
-move `HotMac.app` into Applications. On first launch macOS refuses to open it,
-because it cannot check the developer. Clear the quarantine flag once, either in
-Terminal:
+**Download a release.** Grab `HotMac-<version>.dmg` (drag the app onto the
+Applications shortcut) or `HotMac-<version>.zip` (unzip it and move
+`HotMac.app` into Applications) from Releases. On first launch macOS refuses to
+open it, because it cannot check the developer. Clear the quarantine flag once,
+either in Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/HotMac.app
@@ -177,14 +178,14 @@ The version lives in `Info.plist` (`CFBundleShortVersionString`). To cut a
 release, bump it, commit, and push a matching tag:
 
 ```bash
-./build.py --dist   # writes dist/HotMac-<version>.zip
+./build.py --dist   # writes dist/HotMac-<version>.zip and .dmg
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
 The `Release` GitHub Actions workflow (`.github/workflows/release.yml`) runs
-`./build.py --dist` on the tag and attaches the zip to a new release. Nothing is
-signed or notarized, so it needs no secrets.
+`./build.py --dist` on the tag and attaches both archives to a new release.
+Nothing is signed or notarized, so it needs no secrets.
 
 ## License
 

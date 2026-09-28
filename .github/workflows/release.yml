@@ -24,6 +24,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" dist/HotMac-*.zip \
+          gh release create "${GITHUB_REF_NAME}" dist/HotMac-*.zip dist/HotMac-*.dmg \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes
