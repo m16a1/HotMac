@@ -92,7 +92,7 @@ struct TemperatureModelTests {
         let tick = try #require(reading)
 
         #expect(tick.snapshot.highest == 45.0)
-        #expect(tick.point.values[SensorCatalog.hottestSeriesName] == 45.0)
+        #expect(tick.point.values[SensorCatalog.cpuOverallGroupName] == 45.0)
         #expect(tick.throttleState == .nominal)
         #expect(tick.fans.map(\.current) == [2150.0])
         #expect(model.snapshot == nil)
@@ -112,12 +112,12 @@ struct TemperatureModelTests {
         #expect(reading == nil)
     }
 
-    @Test func theSeriesAreTheGroupsPlusTheHotspot() {
+    @Test func theSeriesAreTheGroupAverages() {
         let model = model()
         model.sample()
 
+        #expect(model.seriesNames == model.snapshot?.groups.map(\.name))
         #expect(model.seriesNames.contains(SensorCatalog.cpuOverallGroupName))
-        #expect(model.seriesNames.last == SensorCatalog.hottestSeriesName)
     }
 
     @Test func theConnectionIsReusedAcrossTicks() {
@@ -130,7 +130,7 @@ struct TemperatureModelTests {
         #expect(transport.closeCount == 0)
         #expect(transport.requests.count > callsAfterFirstTick)
         #expect(model.history.count == 2)
-        #expect(model.history.last?.values[SensorCatalog.hottestSeriesName] == 45.0)
+        #expect(model.history.last?.values[SensorCatalog.cpuOverallGroupName] == 45.0)
     }
 
     @Test func historyCanBeCleared() {
@@ -297,17 +297,118 @@ struct TemperatureModelTests {
         }
     }
 
+    /// A chosen set of series comes back on the next launch instead of the
+    /// defaults, and is never replaced by a later reading.
+    @Test func aChosenSelectionIsRestoredAndKept() {
+        withStoredSelectedSeries(["Memory", "GPU clusters"]) {
+            let model = model()
+            #expect(model.selectedSeries == ["Memory", "GPU clusters"])
+
+            model.sample()
+            #expect(model.selectedSeries == ["Memory", "GPU clusters"])
+        }
+    }
+
+    /// With nothing stored, the first reading seeds the default groups this
+    /// chip reports.
+    @Test func theFirstReadingSeedsTheDefaultSeries() {
+        withStoredSelectedSeries(nil) {
+            let model = model()
+            #expect(model.selectedSeries.isEmpty)
+
+            model.sample()
+            #expect(model.selectedSeries == ["CPU overall", "GPU clusters"])
+        }
+    }
+
+    /// A chip whose keys yield no group has nothing to seed, which is not an
+    /// error and must not invent a selection.
+    @Test func aChipWithNoGroupsSeedsNothing() {
+        withStoredSelectedSeries(nil) {
+            let model = testModel(makeSMC: {
+                SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(0.0)]))
+            })
+            model.sample()
+
+            #expect(model.snapshot != nil)
+            #expect(model.selectedSeries.isEmpty)
+        }
+    }
+
+    /// A reading with nothing to group must not count as the user's choice, or
+    /// the graph would stay empty once real readings arrive.
+    @Test func aReadingWithNothingToGroupIsNotAChoice() {
+        withStoredSelectedSeries(nil) {
+            let transport = FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(0.0)])
+            let model = testModel(makeSMC: { SMC(transport: transport) })
+
+            model.sample()
+            #expect(model.selectedSeries.isEmpty)
+
+            transport.table = ["Tp00": floatEntry(45.0)]
+            model.sample()
+            #expect(model.selectedSeries == ["CPU overall"])
+        }
+    }
+
+    /// A chip that reports groups, but none of the default ones, seeds the first
+    /// few it does report. Four of them, so the fallback count is pinned rather
+    /// than merely bounded.
+    @Test func aChipWithNoDefaultGroupsSeedsItsFirstGroups() {
+        withStoredSelectedSeries(nil) {
+            let model = testModel(makeSMC: {
+                SMC(transport: FakeSMCTransport(
+                    order: ["TCMb", "TCDX", "TVD0", "TUD0"],
+                    table: [
+                        "TCMb": floatEntry(50.0),
+                        "TCDX": floatEntry(51.0),
+                        "TVD0": floatEntry(52.0),
+                        "TUD0": floatEntry(53.0),
+                    ]
+                ))
+            })
+            model.sample()
+
+            #expect(model.selectedSeries == ["CPU die", "CPU die aggregate", "Virtual die"])
+        }
+    }
+
+    /// The shipped defaults are user-visible (the Settings hints name them), so
+    /// pin them by value rather than comparing them with themselves.
+    @Test func theShippedDefaultsArePinned() {
+        #expect(TemperatureModel.defaultRefreshPeriod == 2.0)
+        #expect(TemperatureModel.defaultHistoryLimit == 900)
+    }
+
+    /// Toggling a checkbox in the graph writes the set through, so the choice
+    /// survives a relaunch.
+    @Test func aChangedSelectionIsPersisted() {
+        withStoredSelectedSeries(nil) {
+            let model = model()
+            model.selectedSeries.insert("Memory")
+            #expect(UserDefaults.standard.stringArray(forKey: storedSelectedSeriesKey) == ["Memory"])
+
+            model.selectedSeries.remove("Memory")
+            #expect(
+                UserDefaults.standard.stringArray(forKey: storedSelectedSeriesKey)?.isEmpty == true
+            )
+        }
+    }
+
     #if DEBUG
     @Test func previewDataShowsRoundedDegrees() {
-        let model = testModel()
-        model.loadPreviewData()
+        withStoredSelectedSeries(nil) {
+            let model = testModel()
+            model.loadPreviewData()
 
-        #expect(model.menuBarTitle == "76°C")
-        #expect(model.throttleState == .nominal)
-        #expect(model.fans.count == 2)
-        #expect(model.fans.last?.maximum == 5777.0)
-        #expect(model.fanHistory.count == PreviewData.sampleCount)
-        #expect(model.fanHistory.first?.speeds[1] != nil)
+            #expect(model.menuBarTitle == "76°C")
+            #expect(model.throttleState == .nominal)
+            #expect(model.fans.count == 2)
+            #expect(model.fans.last?.maximum == 5777.0)
+            #expect(model.fanHistory.count == PreviewData.sampleCount)
+            #expect(model.fanHistory.first?.speeds[1] != nil)
+            #expect(!model.selectedSeries.isEmpty)
+        }
     }
     #endif
 }

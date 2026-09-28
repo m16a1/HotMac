@@ -28,8 +28,8 @@ enum PreviewData {
     }
 
     /// One oscillating series: a sine or cosine of `quarterTurns` half-turns
-    /// across the span, added to `offset`. The last entry is the "Hottest
-    /// sensor" series, which is also the snapshot's top reading.
+    /// across the span, added to `offset`. One entry per group the preview
+    /// snapshot reports.
     static let waves: [Wave] = [
         Wave(
             name: SensorCatalog.cpuOverallGroupName,
@@ -38,10 +38,6 @@ enum PreviewData {
         Wave(name: "GPU clusters", offset: 38, amplitude: 10, quarterTurns: 2, useCosine: true),
         Wave(name: "Memory", offset: 40, amplitude: 6, quarterTurns: 4, useCosine: false),
         Wave(name: "SoC package", offset: 34, amplitude: 3, quarterTurns: 3, useCosine: true),
-        Wave(
-            name: SensorCatalog.hottestSeriesName,
-            offset: 58, amplitude: 18, quarterTurns: 2, useCosine: false
-        ),
     ]
 
     struct Wave {

@@ -4,8 +4,6 @@ import Sensors
 
 struct GraphsView: View {
     @EnvironmentObject var model: TemperatureModel
-    @State private var selected: Set<String> = []
-    @State private var didInit = false
 
     private enum Metrics {
         static let sidebarWidth: CGFloat = 210
@@ -14,7 +12,6 @@ struct GraphsView: View {
         static let readoutFontSize: CGFloat = 28
         static let legendSpacing: CGFloat = 10
         static let axisTickCount = 5
-        static let maxInitialSeries = 3
         static let minimumHistoryPoints = 2
     }
 
@@ -28,15 +25,11 @@ struct GraphsView: View {
         static let seriesAxis = "Series"
     }
 
-    /// Series shown when the graph first appears. These are group names chosen
-    /// by `SensorCatalog`, so they must match its labels.
-    private static let defaultVisible: Set<String> = [
-        SensorCatalog.hottestSeriesName,
-        SensorCatalog.cpuOverallGroupName,
-        "GPU clusters",
-        "Memory",
-        "SoC package",
-    ]
+    /// The chosen series this chip actually reports, so a selection stored for
+    /// a different chip cannot leave the chart blank.
+    private var visibleSeries: [String] {
+        model.seriesNames.filter { model.selectedSeries.contains($0) }
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -44,8 +37,6 @@ struct GraphsView: View {
             Divider()
             chartPane
         }
-        .onAppear(perform: initSeries)
-        .onChange(of: model.seriesNames) { _, _ in initSeries() }
     }
 
     private var seriesList: some View {
@@ -87,7 +78,7 @@ struct GraphsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 Chart {
-                    ForEach(model.seriesNames.filter { selected.contains($0) }, id: \.self) { name in
+                    ForEach(visibleSeries, id: \.self) { name in
                         ForEach(model.history) { point in
                             if let value = point.values[name] {
                                 LineMark(
@@ -101,6 +92,10 @@ struct GraphsView: View {
                     }
                 }
                 .chartYScale(domain: .automatic(includesZero: false))
+                .chartForegroundStyleScale(
+                    domain: model.seriesNames,
+                    range: ChartPalette.colors(count: model.seriesNames.count)
+                )
                 .chartYAxisLabel(UI.Text.temperatureAxisLabel)
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: Metrics.axisTickCount)) { _ in
@@ -117,23 +112,14 @@ struct GraphsView: View {
 
     private func binding(for name: String) -> Binding<Bool> {
         Binding(
-            get: { selected.contains(name) },
+            get: { model.selectedSeries.contains(name) },
             set: { isOn in
                 if isOn {
-                    selected.insert(name)
+                    model.selectedSeries.insert(name)
                 } else {
-                    selected.remove(name)
+                    model.selectedSeries.remove(name)
                 }
             }
         )
-    }
-
-    private func initSeries() {
-        guard !didInit, !model.seriesNames.isEmpty else { return }
-        didInit = true
-        let visible = model.seriesNames.filter { Self.defaultVisible.contains($0) }
-        selected = visible.isEmpty
-            ? Set(model.seriesNames.prefix(Metrics.maxInitialSeries))
-            : Set(visible)
     }
 }

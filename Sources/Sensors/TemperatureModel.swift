@@ -12,6 +12,7 @@ public final class TemperatureModel: ObservableObject {
     private enum Storage {
         static let refreshPeriodKey = "refreshPeriod"
         static let historyLimitKey = "historyLimit"
+        static let selectedSeriesKey = "selectedSeries"
     }
 
     private static let queueLabel = "com.hotmac.smc"
@@ -57,7 +58,9 @@ public final class TemperatureModel: ObservableObject {
         let fans: [FanReading]
     }
 
-    @Published public private(set) var snapshot: TemperatureSnapshot?
+    @Published public private(set) var snapshot: TemperatureSnapshot? {
+        didSet { seedSelectionIfNeeded() }
+    }
     @Published public private(set) var history: [HistoryPoint] = []
     /// The fans' speed over time, sampled alongside the temperatures and capped
     /// by the same `historyLimit`.
@@ -75,6 +78,12 @@ public final class TemperatureModel: ObservableObject {
     /// How many samples the graph keeps. Lowering it drops the surplus at once.
     @Published public var historyLimit: Int = TemperatureModel.defaultHistoryLimit {
         didSet { persistHistoryLimit(); trimHistory() }
+    }
+
+    /// The series the Temperatures graph shows, persisted so the choice
+    /// survives a relaunch. Empty until the first reading seeds the defaults.
+    @Published public var selectedSeries: Set<String> = [] {
+        didSet { persistSelectedSeries() }
     }
 
     private let queue = DispatchQueue(label: TemperatureModel.queueLabel, qos: .utility)
@@ -98,6 +107,9 @@ public final class TemperatureModel: ObservableObject {
     private var timer: DispatchSourceTimer?
     private var session: SMCSession?
     private var started = false
+    /// Whether the graph's series have been decided: restored from storage, or
+    /// seeded from the first reading.
+    private var seededSelection = false
 
     /// Dependencies are required rather than defaulted so that this class
     /// contains no production wiring of its own; `TemperatureModel.live()`
@@ -121,6 +133,10 @@ public final class TemperatureModel: ObservableObject {
         if let stored = UserDefaults.standard.object(forKey: Storage.historyLimitKey) as? Int,
            stored > 0 {
             historyLimit = stored
+        }
+        if let stored = UserDefaults.standard.stringArray(forKey: Storage.selectedSeriesKey) {
+            selectedSeries = Set(stored)
+            seededSelection = true
         }
         if startImmediately {
             start()
@@ -160,11 +176,7 @@ public final class TemperatureModel: ObservableObject {
     }
 
     public var seriesNames: [String] {
-        var names = snapshot?.groups.map(\.name) ?? []
-        if snapshot?.highest != nil {
-            names.append(SensorCatalog.hottestSeriesName)
-        }
-        return names
+        snapshot?.groups.map(\.name) ?? []
     }
 
     func start() {
@@ -190,6 +202,20 @@ public final class TemperatureModel: ObservableObject {
 
     private func persistHistoryLimit() {
         UserDefaults.standard.set(historyLimit, forKey: Storage.historyLimitKey)
+    }
+
+    private func persistSelectedSeries() {
+        UserDefaults.standard.set(
+            Array(selectedSeries).sorted(), forKey: Storage.selectedSeriesKey
+        )
+    }
+
+    /// Give the graph its starting series the first time a reading arrives,
+    /// unless a stored choice was restored or the chip reports no groups.
+    private func seedSelectionIfNeeded() {
+        guard !seededSelection, !seriesNames.isEmpty else { return }
+        seededSelection = true
+        selectedSeries = SensorCatalog.defaultSeries(from: seriesNames)
     }
 
     private func restartTimer() {
@@ -224,9 +250,6 @@ public final class TemperatureModel: ObservableObject {
         let fans = SensorCatalog.fanReadings(from: active.readFans())
         var values: [String: Double] = [:]
         for group in snapshot.groups { values[group.name] = group.average }
-        if let highest = snapshot.highest {
-            values[SensorCatalog.hottestSeriesName] = highest
-        }
         return Tick(
             snapshot: snapshot,
             point: HistoryPoint(time: Date(), values: values),

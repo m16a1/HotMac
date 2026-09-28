@@ -81,6 +81,10 @@ struct FansView: View {
             }
         }
         .chartYScale(domain: .automatic(includesZero: false))
+        .chartForegroundStyleScale(
+            domain: model.fans.map(Self.name),
+            range: ChartPalette.colors(count: model.fans.count)
+        )
         .chartYAxisLabel(UI.Text.rpmAxisLabel)
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: Metrics.axisTickCount)) { _ in

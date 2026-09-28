@@ -31,7 +31,7 @@ extension TemperatureModel {
             fanHistory: fanPoints,
             snapshot: TemperatureSnapshot(
                 brand: brand,
-                groups: PreviewData.waves.dropLast().map {
+                groups: PreviewData.waves.map {
                     GroupReading(
                         name: $0.name,
                         average: PreviewData.groupAverage,

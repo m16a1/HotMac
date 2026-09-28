@@ -16,7 +16,8 @@ and lets you watch the individual component temperatures over time.
   - **Fans** — a live chart of each cooling fan's speed in RPM, with the current
     speed and reported range for each fan.
   - **Temperatures** — a live chart of the component temperatures (CPU, GPU,
-    memory, SSD, battery, ...), with a checkbox per series and a Clear button.
+    memory, SSD, battery, ...), one color per series, with a checkbox per series
+    and a Clear button. The checked series are remembered between launches.
 
 ## Requirements
 
@@ -46,7 +47,8 @@ name and rebuild to change it.
   it), `Sensors.swift` (the key mapping and decoding), `FanReading.swift` (the
   fan speed keys and their decoding), `TemperatureLevel.swift`
   (the heat bands the menu bar flags), `ThrottleState.swift` (how far the OS is
-  throttling for heat), `SampleError.swift` (a
+  throttling for heat), `SeriesColor.swift` (the chart palette, as numbers
+  rather than colors so it can be tested), `SampleError.swift` (a
   tick failure tagged with the stage that broke), `TemperatureModel.swift`
   (gathering a reading, publishing it, history), plus the DEBUG-only
   `PreviewData.swift` and `TemperatureModel+Preview.swift`.
@@ -58,7 +60,7 @@ name and rebuild to change it.
 - `Sources/UI/` — `HotMacApp.swift` (the `@main` scene), `MenuBarBadge.swift`
   (the menu bar label), `AboutView.swift` (the About window), `ContentView.swift`
   (the `TabView` shell), `SettingsView.swift`, `FansView.swift`, `GraphsView.swift`,
-  `UI.swift`.
+  `ChartPalette.swift`, `UI.swift`.
 - `Tests/SensorsTests/` — the suite, one file per unit under test.
 - `build.py`, `test.py`, `Info.plist`, `AppIcon.png`, `Package.swift`.
 

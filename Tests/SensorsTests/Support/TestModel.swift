@@ -6,6 +6,7 @@ import Foundation
 /// break these tests rather than silently stop covering the restore paths.
 let storedRefreshPeriodKey = "refreshPeriod"
 let storedHistoryLimitKey = "historyLimit"
+let storedSelectedSeriesKey = "selectedSeries"
 
 /// A model with a deterministic brand, a fake SMC, and synchronous delivery.
 ///
@@ -51,4 +52,8 @@ func withStoredRefreshPeriod(_ value: Any?, _ body: () -> Void) {
 
 func withStoredHistoryLimit(_ value: Any?, _ body: () -> Void) {
     withStoredDefault(storedHistoryLimitKey, value, body)
+}
+
+func withStoredSelectedSeries(_ value: Any?, _ body: () -> Void) {
+    withStoredDefault(storedSelectedSeriesKey, value, body)
 }

@@ -64,7 +64,39 @@ struct SnapshotTests {
         #expect(snapshot.highest == 47.0)
     }
 
-    @Test func theHottestListIsCapped() {
-        #expect(snapshot.hottest.count <= SensorCatalog.hotspots)
+    /// More plausible keys than the cap, so the list size is pinned rather than
+    /// merely bounded: a one-sided assertion cannot see a smaller cap.
+    @Test func theHottestListKeepsOnlyTheTopFive() {
+        var crowded: TemperatureTable = [:]
+        for index in 0..<8 {
+            crowded["Tq0\(index)"] = floatEntry(40.0 + Float(index))
+        }
+
+        let capped = SensorCatalog.snapshot(brand: "Apple M5 Max", table: crowded)
+
+        #expect(capped.hottest.map(\.value) == [47.0, 46.0, 45.0, 44.0, 43.0])
+    }
+
+    /// The band is inclusive at both ends: a sensor sitting exactly on it is a
+    /// reading, not noise. Counted from the edge, either bound could be moved.
+    @Test func readingsOnTheBandEdgesCount() {
+        let edges = SensorCatalog.snapshot(brand: "Apple M5 Max", table: [
+            "Tp00": floatEntry(5.0),
+            "Tp04": floatEntry(120.0),
+        ])
+
+        #expect(edges.hottest.map(\.key) == ["Tp04", "Tp00"])
+        #expect(edges.highest == 120.0)
+    }
+
+    @Test func readingsJustOutsideTheBandAreDropped() {
+        let outside = SensorCatalog.snapshot(brand: "Apple M5 Max", table: [
+            "Tp00": floatEntry(4.99),
+            "Tp04": floatEntry(120.01),
+        ])
+
+        #expect(outside.hottest.isEmpty)
+        #expect(outside.highest == nil)
+        #expect(outside.groups.isEmpty)
     }
 }

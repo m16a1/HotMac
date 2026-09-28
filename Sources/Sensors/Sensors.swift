@@ -32,13 +32,30 @@ public enum SensorCatalog {
     static let tempMin = 5.0
     static let tempMax = 120.0
     static let hotspots = 5
-    public static let hottestSeriesName = "Hottest sensor"
 
     /// Group label for the combined CPU groups, and the fallback used when the
     /// chip is unknown. Both are referenced by the UI, so they live here rather
     /// than as inline strings.
     public static let cpuOverallGroupName = "CPU overall"
     static let cpuFallbackGroupName = "CPU (Tp sensors)"
+
+    /// The groups the Temperatures graph starts with: the combined CPU line
+    /// plus the blocks most likely to move. The labels mirror `prefixGroups`,
+    /// so the two must stay in step.
+    public static let defaultSeriesNames: Set<String> = [
+        cpuOverallGroupName, "GPU clusters", "Memory", "SoC package",
+    ]
+
+    /// How many groups to fall back to when a chip reports none of the
+    /// defaults above.
+    static let initialSeriesCount = 3
+
+    /// The series to show before the user has chosen: the default groups the
+    /// chip actually reports, or its first few groups if it reports none.
+    public static func defaultSeries(from names: [String]) -> Set<String> {
+        let preferred = names.filter { defaultSeriesNames.contains($0) }
+        return preferred.isEmpty ? Set(names.prefix(initialSeriesCount)) : Set(preferred)
+    }
 
     /// Shown when the CPU brand string cannot be read.
     static let unknownChipName = "unknown chip"

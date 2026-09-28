@@ -8,7 +8,9 @@
 /// unnoticed.
 final class FakeSMCTransport: SMCTransport {
     let order: [String]
-    let table: TemperatureTable
+    /// Mutable so a test can let a sensor appear or go implausible between
+    /// samples, which a fixed table cannot express.
+    var table: TemperatureTable
     /// Keys whose key-info call fails as if the kernel refused it.
     let missingInfoKeys: Set<String>
     /// Keys whose value read fails as if the kernel refused it.
