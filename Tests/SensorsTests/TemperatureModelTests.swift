@@ -12,6 +12,9 @@ struct TemperatureModelTests {
     private let table: TemperatureTable = [
         "Tp00": floatEntry(45.0),
         "Tg0a": floatEntry(41.0),
+        "F0Ac": floatEntry(2150.0),
+        "F0Mn": floatEntry(1350.0),
+        "F0Mx": floatEntry(5349.0),
     ]
 
     private func model() -> TemperatureModel {
@@ -25,6 +28,9 @@ struct TemperatureModelTests {
         #expect(model.seriesNames.isEmpty)
         #expect(model.menuBarTitle == "--°C")
         #expect(model.menuBarLevel == nil)
+        #expect(model.throttleState == nil)
+        #expect(model.fans.isEmpty)
+        #expect(model.fanHistory.isEmpty)
     }
 
     @Test func aSampleIsPublished() {
@@ -38,6 +44,34 @@ struct TemperatureModelTests {
         #expect(model.snapshot?.highest == 45.0)
         #expect(model.menuBarTitle == "45°C")
         #expect(model.menuBarLevel == .normal)
+        #expect(model.throttleState == .nominal)
+        #expect(model.fans.map(\.current) == [2150.0])
+        #expect(model.fans.first?.maximum == 5349.0)
+        #expect(model.fanHistory.count == 1)
+        #expect(model.fanHistory.first?.speeds[0] == 2150.0)
+    }
+
+    /// The throttling level travels with the reading, so the UI can show it
+    /// without consulting the OS itself.
+    @Test func aThrottledHostIsPublished() {
+        let throttled = testModel(
+            makeSMC: { SMC(transport: FakeSMCTransport(order: ["Tp00"], table: table)) },
+            readThrottleState: { .serious }
+        )
+        throttled.sample()
+
+        #expect(throttled.throttleState == .serious)
+    }
+
+    /// A machine with no fans is not an error, just an empty list.
+    @Test func aMachineWithNoFansPublishesAnEmptyList() {
+        let fanless = testModel(makeSMC: {
+            SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)]))
+        })
+        fanless.sample()
+
+        #expect(fanless.snapshot != nil)
+        #expect(fanless.fans.isEmpty)
     }
 
     /// The band follows the reading, which is what lets the menu bar flag heat.
@@ -59,7 +93,12 @@ struct TemperatureModelTests {
 
         #expect(tick.snapshot.highest == 45.0)
         #expect(tick.point.values[SensorCatalog.hottestSeriesName] == 45.0)
+        #expect(tick.throttleState == .nominal)
+        #expect(tick.fans.map(\.current) == [2150.0])
         #expect(model.snapshot == nil)
+        #expect(model.throttleState == nil)
+        #expect(model.fans.isEmpty)
+        #expect(model.fanHistory.isEmpty)
         #expect(model.history.isEmpty)
     }
 
@@ -97,9 +136,11 @@ struct TemperatureModelTests {
     @Test func historyCanBeCleared() {
         let model = model()
         model.sample()
+        #expect(!model.fanHistory.isEmpty)
 
         model.clearHistory()
         #expect(model.history.isEmpty)
+        #expect(model.fanHistory.isEmpty)
     }
 
     @Test func aConnectionFailureIsReported() {
@@ -209,6 +250,7 @@ struct TemperatureModelTests {
                 trimming.sample()
             }
             #expect(trimming.history.count == TemperatureModel.defaultHistoryLimit)
+            #expect(trimming.fanHistory.count == TemperatureModel.defaultHistoryLimit)
         }
     }
 
@@ -223,6 +265,7 @@ struct TemperatureModelTests {
 
             model.historyLimit = 2
             #expect(model.history.count == 2)
+            #expect(model.fanHistory.count == 2)
         }
     }
 
@@ -260,6 +303,11 @@ struct TemperatureModelTests {
         model.loadPreviewData()
 
         #expect(model.menuBarTitle == "76°C")
+        #expect(model.throttleState == .nominal)
+        #expect(model.fans.count == 2)
+        #expect(model.fans.last?.maximum == 5777.0)
+        #expect(model.fanHistory.count == PreviewData.sampleCount)
+        #expect(model.fanHistory.first?.speeds[1] != nil)
     }
     #endif
 }

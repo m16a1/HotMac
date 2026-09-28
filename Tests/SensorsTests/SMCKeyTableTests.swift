@@ -7,21 +7,32 @@ import Testing
 struct SMCKeyTableTests {
     private let table: TemperatureTable = [
         "Tp00": floatEntry(45.0),
-        // Not a temperature key, so the walk must skip it.
+        // Neither a temperature sensor nor a fan speed key, so the walk skips it.
         "B0AT": floatEntry(33.0),
         "Tg0a": floatEntry(40.0),
+        "F0Ac": floatEntry(1350.0),
+        "F0Mx": floatEntry(5349.0),
+        // A fan key, but not one of the speed keys, so it is skipped too.
+        "F0Tg": floatEntry(0.0),
     ]
 
     private var walker: SMC {
-        SMC(transport: FakeSMCTransport(order: ["Tp00", "B0AT", "Tg0a"], table: table))
+        SMC(transport: FakeSMCTransport(
+            order: ["Tp00", "B0AT", "Tg0a", "F0Ac", "F0Mx", "F0Tg"],
+            table: table
+        ))
     }
 
     @Test func theWalkKeepsOnlyTemperatureKeys() throws {
-        #expect(try walker.collectTemperatureMeta().keys.sorted() == ["Tg0a", "Tp00"])
+        #expect(try walker.collectMeta().temperatures.keys.sorted() == ["Tg0a", "Tp00"])
+    }
+
+    @Test func theWalkAlsoKeepsTheFanSpeedKeys() throws {
+        #expect(try walker.collectMeta().fans.keys.sorted() == ["F0Ac", "F0Mx"])
     }
 
     @Test func theWalkRecordsEachKeySize() throws {
-        #expect(try walker.collectTemperatureMeta()["Tp00"]?.size == 4)
+        #expect(try walker.collectMeta().temperatures["Tp00"]?.size == 4)
     }
 
     @Test func indexZeroIsTheFirstKey() throws {
@@ -40,7 +51,18 @@ struct SMCKeyTableTests {
             missingInfoKeys: ["Tdead"]
         ))
 
-        #expect(try gap.collectTemperatureMeta().keys.sorted() == ["Tp00"])
+        #expect(try gap.collectMeta().temperatures.keys.sorted() == ["Tp00"])
+    }
+
+    /// The same holds for a fan speed key the kernel refuses.
+    @Test func aFanSpeedKeyTheKernelRefusesIsSkipped() throws {
+        let gap = SMC(transport: FakeSMCTransport(
+            order: ["F0Ac", "F0Mx"],
+            table: ["F0Ac": floatEntry(1350.0), "F0Mx": floatEntry(5349.0)],
+            missingInfoKeys: ["F0Mx"]
+        ))
+
+        #expect(try gap.collectMeta().fans.keys.sorted() == ["F0Ac"])
     }
 
     @Test func fourccSurvivesTheWireOrder() {

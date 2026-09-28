@@ -35,16 +35,40 @@ public final class TemperatureModel: ObservableObject {
         }
     }
 
+    /// One fan sample: every fan's speed at a moment in time.
+    public struct FanHistoryPoint: Identifiable {
+        public let id: UUID
+        public let time: Date
+        /// Speed in RPM, keyed by fan number.
+        public let speeds: [Int: Double]
+
+        init(time: Date, speeds: [Int: Double]) {
+            self.id = UUID()
+            self.time = time
+            self.speeds = speeds
+        }
+    }
+
     /// One completed reading, waiting to be published on the main queue.
     struct Tick {
         let snapshot: TemperatureSnapshot
         let point: HistoryPoint
+        let throttleState: ThrottleState
+        let fans: [FanReading]
     }
 
     @Published public private(set) var snapshot: TemperatureSnapshot?
     @Published public private(set) var history: [HistoryPoint] = []
+    /// The fans' speed over time, sampled alongside the temperatures and capped
+    /// by the same `historyLimit`.
+    @Published public private(set) var fanHistory: [FanHistoryPoint] = []
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var lastUpdate: Date?
+    /// How far the OS is throttling the CPU, nil until the first reading.
+    @Published public private(set) var throttleState: ThrottleState?
+    /// The machine's fans, ordered by number. Empty until the first reading,
+    /// and on a machine with none.
+    @Published public private(set) var fans: [FanReading] = []
     @Published public var refreshPeriod: Double = TemperatureModel.defaultRefreshPeriod {
         didSet { persistPeriod(); restartTimer() }
     }
@@ -63,6 +87,10 @@ public final class TemperatureModel: ObservableObject {
     /// wired to a fake transport instead of the kernel.
     private let makeSMC: () throws -> SMC
 
+    /// The OS throttling level for this tick. Injectable so tests do not depend
+    /// on what the host happens to be doing.
+    private let readThrottleState: () -> ThrottleState
+
     /// Hands work back to the main thread. Injectable so tests can stay
     /// synchronous instead of spinning a run loop.
     private let deliver: (@escaping () -> Void) -> Void
@@ -79,9 +107,11 @@ public final class TemperatureModel: ObservableObject {
         startImmediately: Bool = true,
         brand: String,
         makeSMC: @escaping () throws -> SMC,
+        readThrottleState: @escaping () -> ThrottleState,
         deliver: @escaping (@escaping () -> Void) -> Void
     ) {
         self.makeSMC = makeSMC
+        self.readThrottleState = readThrottleState
         self.deliver = deliver
         self.brand = brand
         if let stored = UserDefaults.standard.object(forKey: Storage.refreshPeriodKey) as? Double,
@@ -101,10 +131,19 @@ public final class TemperatureModel: ObservableObject {
     /// Replace the published state with synthetic data, for rendering the views
     /// without an SMC. It lives beside the stored properties so the DEBUG-only
     /// preview file does not need access to their setters.
-    func adopt(history: [HistoryPoint], snapshot: TemperatureSnapshot?) {
+    func adopt(
+        history: [HistoryPoint],
+        fanHistory: [FanHistoryPoint],
+        snapshot: TemperatureSnapshot?,
+        throttleState: ThrottleState,
+        fans: [FanReading]
+    ) {
         self.history = history
+        self.fanHistory = fanHistory
         self.lastUpdate = history.last?.time
         self.snapshot = snapshot
+        self.throttleState = throttleState
+        self.fans = fans
     }
 #endif
 
@@ -142,6 +181,7 @@ public final class TemperatureModel: ObservableObject {
 
     public func clearHistory() {
         history.removeAll()
+        fanHistory.removeAll()
     }
 
     private func persistPeriod() {
@@ -181,12 +221,18 @@ public final class TemperatureModel: ObservableObject {
         guard !table.isEmpty else { return nil }
 
         let snapshot = SensorCatalog.snapshot(brand: brand, table: table)
+        let fans = SensorCatalog.fanReadings(from: active.readFans())
         var values: [String: Double] = [:]
         for group in snapshot.groups { values[group.name] = group.average }
         if let highest = snapshot.highest {
             values[SensorCatalog.hottestSeriesName] = highest
         }
-        return Tick(snapshot: snapshot, point: HistoryPoint(time: Date(), values: values))
+        return Tick(
+            snapshot: snapshot,
+            point: HistoryPoint(time: Date(), values: values),
+            throttleState: readThrottleState(),
+            fans: fans
+        )
     }
 
     /// One sampling tick. Not private so tests can drive it directly rather
@@ -195,7 +241,12 @@ public final class TemperatureModel: ObservableObject {
         do {
             guard let tick = try readTick() else { return }
             deliver { [weak self] in
-                self?.apply(snapshot: tick.snapshot, point: tick.point)
+                self?.apply(
+                    snapshot: tick.snapshot,
+                    point: tick.point,
+                    throttleState: tick.throttleState,
+                    fans: tick.fans
+                )
             }
         } catch {
             session = nil
@@ -205,18 +256,33 @@ public final class TemperatureModel: ObservableObject {
         }
     }
 
-    private func apply(snapshot: TemperatureSnapshot, point: HistoryPoint) {
+    private func apply(
+        snapshot: TemperatureSnapshot,
+        point: HistoryPoint,
+        throttleState: ThrottleState,
+        fans: [FanReading]
+    ) {
         self.snapshot = snapshot
+        self.throttleState = throttleState
+        self.fans = fans
         self.errorMessage = nil
         self.lastUpdate = point.time
         history.append(point)
+        fanHistory.append(
+            FanHistoryPoint(
+                time: point.time,
+                speeds: Dictionary(uniqueKeysWithValues: fans.map { ($0.index, $0.current) })
+            )
+        )
         trimHistory()
     }
 
-    /// Drop the oldest samples once the graph holds more than the limit. Runs
-    /// both when a sample arrives and when the user lowers the limit.
+    /// Drop the oldest samples once a graph holds more than the limit. Runs
+    /// both when a sample arrives and when the user lowers the limit. Removing
+    /// zero is a no-op, which keeps the two arrays in step without a branch
+    /// that could never be taken.
     private func trimHistory() {
-        guard history.count > historyLimit else { return }
-        history.removeFirst(history.count - historyLimit)
+        history.removeFirst(max(0, history.count - historyLimit))
+        fanHistory.removeFirst(max(0, fanHistory.count - historyLimit))
     }
 }

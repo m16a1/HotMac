@@ -21,6 +21,11 @@ struct SettingsView: View {
         static let chip = "Chip"
         static let highest = "Highest"
         static let lastUpdate = "Last update"
+        static let throttling = "Throttling"
+        static let throttleNominal = "Nominal"
+        static let throttleFair = "Fair"
+        static let throttleSerious = "Serious"
+        static let throttleCritical = "Critical"
         static let error = "Error"
         static let periodFormat = "%.1f s"
         static let historyFormat = "%d samples"
@@ -81,6 +86,10 @@ struct SettingsView: View {
                         ?? UI.Text.noValue)
                         .monospacedDigit()
                 }
+                LabeledContent(Labels.throttling) {
+                    Text(Self.throttlingText(model.throttleState))
+                        .foregroundStyle(Self.throttlingColor(model.throttleState))
+                }
                 if let error = model.errorMessage {
                     LabeledContent(Labels.error) {
                         Text(error).foregroundStyle(.red)
@@ -89,6 +98,27 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// The OS throttling level, or the placeholder before the first reading.
+    private static func throttlingText(_ state: ThrottleState?) -> String {
+        guard let state else { return UI.Text.noValue }
+        return switch state {
+        case .nominal: Labels.throttleNominal
+        case .fair: Labels.throttleFair
+        case .serious: Labels.throttleSerious
+        case .critical: Labels.throttleCritical
+        }
+    }
+
+    /// Only the levels that mean real throttling get a color.
+    private static func throttlingColor(_ state: ThrottleState?) -> Color {
+        guard let state else { return .primary }
+        return switch state {
+        case .nominal, .fair: .primary
+        case .serious: .orange
+        case .critical: .red
+        }
     }
 
     /// The slider works in `Double`, the model stores a whole sample count.

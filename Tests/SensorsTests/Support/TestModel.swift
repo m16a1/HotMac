@@ -10,15 +10,17 @@ let storedHistoryLimitKey = "historyLimit"
 /// A model with a deterministic brand, a fake SMC, and synchronous delivery.
 ///
 /// Defaults to a client that fails, which is what a model must cope with when
-/// there is no AppleSMC service.
+/// there is no AppleSMC service, and to a host that is not throttling.
 func testModel(
     startImmediately: Bool = false,
-    makeSMC: @escaping () throws -> SMC = { throw SMC.SMCError.serviceNotFound }
+    makeSMC: @escaping () throws -> SMC = { throw SMC.SMCError.serviceNotFound },
+    readThrottleState: @escaping () -> ThrottleState = { .nominal }
 ) -> TemperatureModel {
     TemperatureModel(
         startImmediately: startImmediately,
         brand: "Apple M5 Max",
         makeSMC: makeSMC,
+        readThrottleState: readThrottleState,
         deliver: { $0() }
     )
 }

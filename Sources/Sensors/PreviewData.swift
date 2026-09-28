@@ -11,6 +11,22 @@ enum PreviewData {
     static let hottestKey = "TCMb"
     static let hottestValue = 76.0
 
+    /// A plausible status row: the hot waveform is presented as un-throttled.
+    static let throttleState = ThrottleState.nominal
+
+    /// A plausible fan readout: two fans, both above idle, like a machine that
+    /// has been working.
+    static let fans: [FanReading] = [
+        FanReading(index: 0, current: 2150, minimum: 1350, maximum: 5349),
+        FanReading(index: 1, current: 2380, minimum: 1350, maximum: 5777),
+    ]
+
+    /// A fan's speed at a point in the preview: a slow swing around its
+    /// reported current, so the graph has something to draw.
+    static func fanSpeed(_ fan: FanReading, inPhase phase: Double) -> Double {
+        fan.current * (1 + 0.15 * sin(phase * .pi * 2))
+    }
+
     /// One oscillating series: a sine or cosine of `quarterTurns` half-turns
     /// across the span, added to `offset`. The last entry is the "Hottest
     /// sensor" series, which is also the snapshot's top reading.

@@ -18,10 +18,23 @@ enum UI {
         static let noValue = "—"
         static let temperatureFormat = "%.1f °C"
         static let temperatureAxisLabel = "°C"
+        static let rpmFormat = "%.0f RPM"
+        static let rpmRangeFormat = "%.0f–%.0f RPM"
+        static let rpmAxisLabel = "RPM"
     }
 
     /// One decimal of °C, or the placeholder when there is no reading yet.
     static func temperature(_ value: Double?) -> String {
         value.map { String(format: Text.temperatureFormat, $0) } ?? Text.noValue
+    }
+
+    /// A whole number of revolutions per minute, e.g. `2150 RPM`.
+    static func rpm(_ value: Double) -> String {
+        String(format: Text.rpmFormat, value)
+    }
+
+    /// A fan's speed range, e.g. `1350–5349 RPM`.
+    static func rpmRange(_ low: Double, _ high: Double) -> String {
+        String(format: Text.rpmRangeFormat, low, high)
     }
 }

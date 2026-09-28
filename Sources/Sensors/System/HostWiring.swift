@@ -11,6 +11,7 @@ extension TemperatureModel {
         TemperatureModel(
             brand: SensorCatalog.systemChipBrand(),
             makeSMC: { try SMC() },
+            readThrottleState: ThrottleState.system,
             deliver: { DispatchQueue.main.async(execute: $0) }
         )
     }

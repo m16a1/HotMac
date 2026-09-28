@@ -8,9 +8,12 @@ and lets you watch the individual component temperatures over time.
   80 °C (orange) and 95 °C (red).
 - **Menu** has three items: `Show UI`, `About HotMac` (a window with the app icon
   at 512×512 px, the name, and the version), and `Quit`.
-- **UI**, a single window with two screens:
-  - **Settings** — how often the sensors are sampled (default 2 s) and how many
-    samples the graph keeps (default 900).
+- **UI**, a single window with three screens:
+  - **Settings** — how often the sensors are sampled (default 2 s), how many
+    samples the graph keeps (default 900), and a status section (chip, highest,
+    last update, and whether the OS is throttling the CPU for heat).
+  - **Fans** — a live chart of each cooling fan's speed in RPM, with the current
+    speed and reported range for each fan.
   - **Graphs** — a live chart of the component temperatures (CPU, GPU, memory,
     SSD, battery, ...), with a checkbox per series and a Clear button.
 
@@ -39,18 +42,22 @@ name and rebuild to change it.
 
 - `Sources/Sensors/` — `SMC.swift` (the protocol client, over an injected
   transport), `SMCSession.swift` (one connection plus the key metadata read with
-  it), `Sensors.swift` (the key mapping and decoding), `TemperatureLevel.swift`
-  (the heat bands the menu bar flags), `SampleError.swift` (a
+  it), `Sensors.swift` (the key mapping and decoding), `FanReading.swift` (the
+  fan speed keys and their decoding), `TemperatureLevel.swift`
+  (the heat bands the menu bar flags), `ThrottleState.swift` (how far the OS is
+  throttling for heat), `SampleError.swift` (a
   tick failure tagged with the stage that broke), `TemperatureModel.swift`
   (gathering a reading, publishing it, history), plus the DEBUG-only
   `PreviewData.swift` and `TemperatureModel+Preview.swift`.
 - `Sources/Sensors/System/` — the host boundary and the only code that touches
-  the machine: `IOKitTransport.swift` (the kernel), `Sysctl.swift`, and
+  the machine: `IOKitTransport.swift` (the kernel), `Sysctl.swift`,
+  `Throttle.swift` (the OS throttling level), and
   `HostWiring.swift` (the composition root, `TemperatureModel.live()`). Excluded
   from the coverage report, because it cannot run off real hardware.
 - `Sources/UI/` — `HotMacApp.swift` (the `@main` scene), `MenuBarBadge.swift`
   (the menu bar label), `AboutView.swift` (the About window), `ContentView.swift`
-  (the `TabView` shell), `SettingsView.swift`, `GraphsView.swift`, `UI.swift`.
+  (the `TabView` shell), `SettingsView.swift`, `FansView.swift`, `GraphsView.swift`,
+  `UI.swift`.
 - `Tests/SensorsTests/` — the suite, one file per unit under test.
 - `build.py`, `test.py`, `Info.plist`, `AppIcon.png`, `Package.swift`.
 
@@ -114,6 +121,16 @@ table itself, the same way other macOS monitoring tools do.
   yellow, orange and red capsule. The label is drawn by `MenuBarBadge` and given
   to the system as an image, because a menu bar extra renders its label as a
   monochrome template image, which discards any tint applied to the text.
+- Throttling comes from `ProcessInfo.thermalState`, which the OS raises from
+  `nominal` to `fair`, `serious` and `critical` as it holds the CPU back for
+  heat. It is read next to the sensors on each tick and shown in the Settings
+  status section, colored from `serious` up.
+- Fan speeds come from the SMC as well. Each fan is a family of keys numbered
+  from zero, of which the app reads three: `F0Ac` (current), `F0Mn` (minimum)
+  and `F0Mx` (maximum). They are read beside the temperatures on each tick and
+  charted in the Fans screen, on the same rolling history as the temperatures.
+  A fan that reads 0 RPM is reported as stopped, not hidden, which is normal on
+  Apple silicon at idle.
 
 ## Limitations
 

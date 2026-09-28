@@ -84,14 +84,23 @@ final class SMC {
         transport.close()
     }
 
-    /// Walk the key table and return the size/format/endianness of every key
-    /// beginning with `temperaturePrefix`, which is every temperature sensor.
+    /// The keys a session keeps metadata for: the temperature sensors and the
+    /// fan speed keys.
+    struct CollectedMeta {
+        let temperatures: [String: KeyInfo]
+        let fans: [String: KeyInfo]
+    }
+
+    /// Walk the key table once and return the size/format/endianness of every
+    /// temperature sensor and every fan speed key.
     ///
     /// The value size is discovered first because the kernel rejects a read
     /// whose declared size does not match the key, and it also requires the
-    /// request to be large enough to hold the value.
-    func collectTemperatureMeta() throws -> [String: KeyInfo] {
-        var meta: [String: KeyInfo] = [:]
+    /// request to be large enough to hold the value. Both families come from
+    /// one walk because the walk is the expensive part of connecting.
+    func collectMeta() throws -> CollectedMeta {
+        var temperatures: [String: KeyInfo] = [:]
+        var fans: [String: KeyInfo] = [:]
         var empties = 0
         var index: UInt32 = 0
         while empties < Self.emptyRun {
@@ -102,12 +111,13 @@ final class SMC {
                 continue
             }
             empties = 0
-            guard name.hasPrefix(Self.temperaturePrefix) else { continue }
-            if let info = try? keyInfo(name) {
-                meta[name] = info
+            if name.hasPrefix(Self.temperaturePrefix) {
+                if let info = try? keyInfo(name) { temperatures[name] = info }
+            } else if SensorCatalog.isFanKey(name) {
+                if let info = try? keyInfo(name) { fans[name] = info }
             }
         }
-        return meta
+        return CollectedMeta(temperatures: temperatures, fans: fans)
     }
 
     func indexKey(_ index: UInt32) throws -> String? {

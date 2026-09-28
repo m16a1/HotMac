@@ -8,6 +8,7 @@ extension TemperatureModel {
     func loadPreviewData(samples: Int = PreviewData.sampleCount) {
         let now = Date()
         var points: [HistoryPoint] = []
+        var fanPoints: [FanHistoryPoint] = []
         for index in 0..<samples {
             let time = now.addingTimeInterval(Double(index - samples) * refreshPeriod)
             let phase = Double(index) / Double(samples)
@@ -16,9 +17,18 @@ extension TemperatureModel {
                 values[wave.name] = wave.value(inPhase: phase)
             }
             points.append(HistoryPoint(time: time, values: values))
+            fanPoints.append(
+                FanHistoryPoint(
+                    time: time,
+                    speeds: Dictionary(uniqueKeysWithValues: PreviewData.fans.map {
+                        ($0.index, PreviewData.fanSpeed($0, inPhase: phase))
+                    })
+                )
+            )
         }
         adopt(
             history: points,
+            fanHistory: fanPoints,
             snapshot: TemperatureSnapshot(
                 brand: brand,
                 groups: PreviewData.waves.dropLast().map {
@@ -34,7 +44,9 @@ extension TemperatureModel {
                     SensorReading(key: PreviewData.hottestKey, value: PreviewData.hottestValue)
                 ],
                 highest: PreviewData.hottestValue
-            )
+            ),
+            throttleState: PreviewData.throttleState,
+            fans: PreviewData.fans
         )
     }
 }
