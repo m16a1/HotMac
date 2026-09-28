@@ -14,8 +14,8 @@ and lets you watch the individual component temperatures over time.
     last update, and whether the OS is throttling the CPU for heat).
   - **Fans** — a live chart of each cooling fan's speed in RPM, with the current
     speed and reported range for each fan.
-  - **Graphs** — a live chart of the component temperatures (CPU, GPU, memory,
-    SSD, battery, ...), with a checkbox per series and a Clear button.
+  - **Temperatures** — a live chart of the component temperatures (CPU, GPU,
+    memory, SSD, battery, ...), with a checkbox per series and a Clear button.
 
 ## Requirements
 
