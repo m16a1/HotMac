@@ -91,6 +91,27 @@ public enum SensorCatalog {
         "Virtual die":
             "Power-supply sensors inside the chip. They read hotter than the "
             + "chip does by design, so a high number here is normal.",
+        "Voltage probes":
+            "Probes on the chip's power rails. They follow the load only "
+            + "loosely and sit well below the chip's own temperature.",
+        "Voltage probes (group 1)":
+            "A second bank of the power-rail probes, on another part of the "
+            + "board, reading the same kind of thing.",
+        "Voltage probe mirrors":
+            "Some power-rail probes are reported twice under different names. "
+            + "This is the second copy, so it moves with the first.",
+        "Virtual memory":
+            "Power-supply sensors for the memory's rails, not the memory chips "
+            + "themselves. They warm up slowly.",
+        "Virtual sensors":
+            "Power-supply sensors for the system rails. They stay far below "
+            + "the chip's own temperature.",
+        "Virtual ambient":
+            "A board-level ambient reading. It barely moves, and sits near "
+            + "room temperature.",
+        "Virtual voltage":
+            "A power-rail reading taken next to the chip, so it follows the "
+            + "chip's load closely.",
         "Uncore die":
             "The parts of the chip that are not cores: its caches and internal "
             + "connections.",
@@ -235,11 +256,24 @@ public enum SensorCatalog {
     /// a hand-picked sample. A M5 Max exposes 84 Tg* GPU clusters; "Tf*" is
     /// omitted on purpose because it is the GPU fabric block, whose Min/Max
     /// aggregate slots would dominate the group and the hotspot scan.
+    ///
+    /// Every `TV*` family that reports a temperature is listed here, so the
+    /// whole virtual block is charted: the die, the voltage probes and their
+    /// mirror bank, the memory, system, ambient and voltage rails. The
+    /// `TV?i` keys are index values, not temperatures, and `TVC`/`TVG`/`TVP`
+    /// hold nothing else, so those families have no group.
     static let prefixGroups: [(String, String)] = [
         ("GPU clusters", "Tg"),
         ("CPU die", "TCM"),
         ("CPU die aggregate", "TCD"),
         ("Virtual die", "TVD"),
+        ("Voltage probes", "TV0"),
+        ("Voltage probes (group 1)", "TV1"),
+        ("Voltage probe mirrors", "TVN"),
+        ("Virtual memory", "TVM"),
+        ("Virtual sensors", "TVS"),
+        ("Virtual ambient", "TVA"),
+        ("Virtual voltage", "TVV"),
         ("Uncore die", "TUD"),
         ("Memory", "Tm"),
         ("SoC package", "TN"),

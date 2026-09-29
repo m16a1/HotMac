@@ -73,6 +73,30 @@ struct SnapshotTests {
         #expect(group("Virtual die")?.average == 52.0)
     }
 
+    /// The whole virtual block is charted, one line per family, and the
+    /// floor-clamped summary stays out of the average of the family it belongs
+    /// to: `TVMR` is the memory rail, `TVMX` the clamped summary.
+    @Test func theVirtualBlockIsChartedWithoutTheSummaries() {
+        let table: TemperatureTable = [
+            "TVMR": floatEntry(20.0),
+            "TVMX": floatEntry(61.0),
+            "TVS0": floatEntry(40.0),
+            "TVS2": floatEntry(44.0),
+            "TVA0": floatEntry(27.0),
+            "TN00": floatEntry(34.0),
+        ]
+        let snapshot = SensorCatalog.snapshot(brand: "Apple M5 Max", table: table)
+        let virtualMemory = snapshot.groups.first { $0.name == "Virtual memory" }
+
+        #expect(virtualMemory?.average == 20.0)
+        #expect(virtualMemory?.count == 1)
+        #expect(snapshot.groups.first { $0.name == "Virtual sensors" }?.average == 42.0)
+        #expect(snapshot.groups.first { $0.name == "Virtual ambient" }?.average == 27.0)
+        #expect(snapshot.groups.first { $0.name == "SoC package" }?.average == 34.0)
+        // Charting them must not put them back into the ranking.
+        #expect(!snapshot.hottest.contains { $0.key.hasPrefix("TV") })
+    }
+
     @Test func theHighestMatchesTheTopRealSensor() {
         #expect(snapshot.highest == 47.0)
     }

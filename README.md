@@ -19,7 +19,9 @@ and lets you watch the individual component temperatures over time.
     memory, SSD, battery, ...), one color per series, with a checkbox per series
     and a Clear button. The checkboxes are split into **Physical** series — the
     sensors measuring the hardware — and **Virtual** ones, the readings Apple
-    computes from them, so a derived number cannot be read as a measurement.
+    computes from them (the virtual die, the voltage probes and their mirror
+    bank, the memory, system, ambient and voltage rails). A derived number
+    therefore cannot be read as a measurement.
     Hovering a series explains what that sensor measures,
     and the checked series are remembered between launches.
 
