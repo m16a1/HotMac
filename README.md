@@ -17,7 +17,10 @@ and lets you watch the individual component temperatures over time.
     speed and reported range for each fan.
   - **Temperatures** — a live chart of the component temperatures (CPU, GPU,
     memory, SSD, battery, ...), one color per series, with a checkbox per series
-    and a Clear button. Hovering a series explains what that sensor measures,
+    and a Clear button. The checkboxes are split into **Physical** series — the
+    sensors measuring the hardware — and **Virtual** ones, the readings Apple
+    computes from them, so a derived number cannot be read as a measurement.
+    Hovering a series explains what that sensor measures,
     and the checked series are remembered between launches.
 
 ## Install

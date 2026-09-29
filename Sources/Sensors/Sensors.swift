@@ -186,6 +186,24 @@ public enum SensorCatalog {
             && !virtualTempPrefixes.contains { key.hasPrefix($0) }
     }
 
+    /// The group labels built from a virtual family, derived from
+    /// `prefixGroups` so adding a virtual prefix to the mapping cannot leave
+    /// this set stale and the series list out of step with it.
+    static let virtualGroupNames: Set<String> = {
+        Set(
+            prefixGroups
+                .filter { _, prefix in virtualTempPrefixes.contains { prefix.hasPrefix($0) } }
+                .map(\.0)
+        )
+    }()
+
+    /// Whether a group the chip reports is a virtual reading rather than a
+    /// thermometer on the hardware, so the Temperatures graph can show the two
+    /// kinds of series apart.
+    public static func isVirtualGroup(_ name: String) -> Bool {
+        virtualGroupNames.contains(name)
+    }
+
     static let chipCPUGroups: [String: [(String, [String])]] = [
         "M1": [
             ("CPU efficiency cores", ["Tp09", "Tp0T"]),

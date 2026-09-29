@@ -8,6 +8,7 @@ struct GraphsView: View {
     private enum Metrics {
         static let sidebarWidth: CGFloat = 210
         static let sidebarSpacing: CGFloat = 6
+        static let sectionSpacing: CGFloat = 12
         static let paneSpacing: CGFloat = 8
         static let readoutFontSize: CGFloat = 28
         static let legendSpacing: CGFloat = 10
@@ -17,6 +18,12 @@ struct GraphsView: View {
 
     private enum Labels {
         static let seriesHeading = "Series"
+        static let physicalHeading = "Physical"
+        static let physicalHint =
+            "Thermometers on the hardware. These are the chips measuring their own heat."
+        static let virtualHeading = "Virtual"
+        static let virtualHint =
+            "Readings Apple computes from the sensors above, not thermometers of their own."
         static let clear = "Clear"
         static let collecting = "Collecting data…"
         static let highestCaption = "highest sensor"
@@ -31,6 +38,18 @@ struct GraphsView: View {
         model.seriesNames.filter { model.selectedSeries.contains($0) }
     }
 
+    /// The series this chip reports, split by kind: the thermometers on the
+    /// hardware first, then the readings Apple derives from them. The chart
+    /// draws both kinds; only the list separates them, so a computed reading is
+    /// never mistaken for a measurement.
+    private var physicalSeries: [String] {
+        model.seriesNames.filter { !SensorCatalog.isVirtualGroup($0) }
+    }
+
+    private var virtualSeries: [String] {
+        model.seriesNames.filter(SensorCatalog.isVirtualGroup)
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             seriesList
@@ -43,15 +62,30 @@ struct GraphsView: View {
         VStack(alignment: .leading, spacing: Metrics.sidebarSpacing) {
             Text(Labels.seriesHeading)
                 .font(.headline)
-            ForEach(model.seriesNames, id: \.self) { name in
-                Toggle(name, isOn: binding(for: name))
-                    .toggleStyle(.checkbox)
-                    .help(SensorCatalog.description(for: name))
+            section(Labels.physicalHeading, hint: Labels.physicalHint, names: physicalSeries)
+            if !virtualSeries.isEmpty {
+                section(Labels.virtualHeading, hint: Labels.virtualHint, names: virtualSeries)
+                    .padding(.top, Metrics.sectionSpacing)
             }
             Spacer(minLength: 0)
         }
         .padding(UI.Layout.panelPadding)
         .frame(width: Metrics.sidebarWidth, alignment: .topLeading)
+    }
+
+    /// One kind of series: a caption saying what the kind is, then its toggles.
+    private func section(_ heading: String, hint: String, names: [String]) -> some View {
+        VStack(alignment: .leading, spacing: Metrics.sidebarSpacing) {
+            Text(heading)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .help(hint)
+            ForEach(names, id: \.self) { name in
+                Toggle(name, isOn: binding(for: name))
+                    .toggleStyle(.checkbox)
+                    .help(SensorCatalog.description(for: name))
+            }
+        }
     }
 
     private var chartPane: some View {
