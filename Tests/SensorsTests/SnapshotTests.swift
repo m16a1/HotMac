@@ -17,6 +17,9 @@ struct SnapshotTests {
         "TVMX": floatEntry(61.0),
         "TVmS": floatEntry(61.0),
         "TVms": floatEntry(61.0),
+        // A virtual family that is not floor-clamped; it would rank as the
+        // hottest sensor if the ranking did not skip virtual keys.
+        "TVD0": floatEntry(52.0),
         // Out of the plausibility band, and an undecodable format.
         "TCDX": floatEntry(200.0),
         "Tzzz": ("hex_", [0x01, 0x02], true),
@@ -58,6 +61,16 @@ struct SnapshotTests {
     @Test func unreadableKeysAreNotRanked() {
         #expect(!snapshot.hottest.contains { $0.key == "Tf06" })
         #expect(!snapshot.hottest.contains { $0.key == "TVMX" })
+    }
+
+    @Test func virtualReadingsAreNotRanked() {
+        #expect(!snapshot.hottest.contains { $0.key == "TVD0" })
+    }
+
+    /// The virtual block keeps its chart group even though it is not ranked, so
+    /// the graphs still show it.
+    @Test func aVirtualFamilyIsStillAveragedIntoItsGroup() {
+        #expect(group("Virtual die")?.average == 52.0)
     }
 
     @Test func theHighestMatchesTheTopRealSensor() {

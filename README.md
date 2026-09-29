@@ -3,9 +3,9 @@
 A tiny macOS menu bar app that shows the hottest temperature sensor on your Mac,
 and lets you watch the individual component temperatures over time.
 
-- **Menu bar** shows the current highest reading, e.g. `58°C`, in plain text while
-  the machine is cool and on a colored capsule once it passes 60 °C (yellow),
-  80 °C (orange) and 95 °C (red).
+- **Menu bar** shows the current highest real-sensor reading, e.g. `58°C`, in
+  plain text while the machine is cool and on a colored capsule once it passes
+  60 °C (yellow), 80 °C (orange) and 95 °C (red).
 - **Menu** lists the three screens — `Temperatures`, `Fans` and `Settings` — each
   opening the window straight to it, then `About HotMac` (a window with the app
   icon at 512×512 px, the name, and the version) and `Quit`.
@@ -146,9 +146,11 @@ table itself, the same way other macOS monitoring tools do.
   hottest list and hide the live hotspot; they are excluded by name. The
   `TVMX`/`TVmS`/`TVms` "Virtual Memory Summary" keys are also excluded: they are
   derived summaries floored at exactly 61 °C, so at idle they always outrank the
-  real sensors and would pin the menu bar at a constant 61 °C. Any reading
-  outside 5–120 °C is dropped too, which removes unpopulated slots that read
-  exactly 0.
+  real sensors and would pin the menu bar at a constant 61 °C. Apple's whole
+  `TV*` block is skipped by the ranking for the same reason (computed summaries
+  and power-delivery rails, not diodes), though it still appears as a graph
+  series. Any reading outside 5–120 °C is dropped too, which removes unpopulated
+  slots that read exactly 0.
 - The menu bar emphasizes the reading by band, using the thresholds in
   `Sources/Sensors/TemperatureLevel.swift`: plain text below 60 °C, then a
   yellow, orange and red capsule. The label is drawn by `MenuBarBadge` and given

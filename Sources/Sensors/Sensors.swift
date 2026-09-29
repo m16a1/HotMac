@@ -169,6 +169,23 @@ public enum SensorCatalog {
     /// sensors.
     static let excludedTempKeys: Set<String> = aggregateTempKeys.union(derivedTempKeys)
 
+    /// The "virtual" families (`TV*`) are Apple's computed readings, not raw
+    /// diodes: the `TVM*` summaries, `TVD*` virtual die, `TVS*` system-rail
+    /// VRMs, `TVA*` and `TVV0`. They follow load but are summaries or
+    /// power-delivery rails, so a virtual value can sit above every real
+    /// sensor (at idle on the M5 Max `TVD0` ties the CPU die, and the clamped
+    /// `TVM` trio used to win outright). They keep their own chart group but
+    /// are never ranked as the hottest point sensor, so the menu bar and the
+    /// hottest list report a real thermometer. See SENSORS.md.
+    static let virtualTempPrefixes = ["TV"]
+
+    /// Whether `key` may be ranked as a point sensor: neither an aggregate slot
+    /// nor a derived summary, and not from a virtual family.
+    static func isRankablePointSensor(_ key: String) -> Bool {
+        !excludedTempKeys.contains(key)
+            && !virtualTempPrefixes.contains { key.hasPrefix($0) }
+    }
+
     static let chipCPUGroups: [String: [(String, [String])]] = [
         "M1": [
             ("CPU efficiency cores", ["Tp09", "Tp0T"]),
@@ -274,7 +291,7 @@ public enum SensorCatalog {
 
         var hottest: [SensorReading] = []
         for (key, entry) in table {
-            guard key.hasPrefix(SMC.temperaturePrefix), !excludedTempKeys.contains(key) else { continue }
+            guard key.hasPrefix(SMC.temperaturePrefix), isRankablePointSensor(key) else { continue }
             guard let value = decodeValue(
                 format: entry.format, raw: entry.raw, littleEndian: entry.littleEndian
             ) else { continue }
