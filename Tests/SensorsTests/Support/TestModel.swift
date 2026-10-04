@@ -11,17 +11,26 @@ let storedSelectedSeriesKey = "selectedSeries"
 /// A model with a deterministic brand, a fake SMC, and synchronous delivery.
 ///
 /// Defaults to a client that fails, which is what a model must cope with when
-/// there is no AppleSMC service, and to a host that is not throttling.
+/// there is no AppleSMC service, to a host that is not throttling, to a host
+/// with no processes to report, and to a host whose GPU reports nothing at all.
 func testModel(
     startImmediately: Bool = false,
     makeSMC: @escaping () throws -> SMC = { throw SMC.SMCError.serviceNotFound },
-    readThrottleState: @escaping () -> ThrottleState = { .nominal }
+    readThrottleState: @escaping () -> ThrottleState = { .nominal },
+    readProcesses: @escaping () -> [ProcessCounters] = { [] },
+    readGPU: @escaping () -> GPUUtilization? = { nil },
+    readGPUClientCounters: @escaping () -> [GPUClientCounters] = { [] },
+    readFallbackUsage: @escaping ([Int32]) -> [Int32: ProcessUsage] = { _ in [:] }
 ) -> TemperatureModel {
     TemperatureModel(
         startImmediately: startImmediately,
         brand: "Apple M5 Max",
         makeSMC: makeSMC,
         readThrottleState: readThrottleState,
+        readProcesses: readProcesses,
+        readGPU: readGPU,
+        readGPUClientCounters: readGPUClientCounters,
+        readFallbackUsage: readFallbackUsage,
         deliver: { $0() }
     )
 }

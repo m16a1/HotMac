@@ -12,6 +12,10 @@ extension TemperatureModel {
             brand: SensorCatalog.systemChipBrand(),
             makeSMC: { try SMC() },
             readThrottleState: ThrottleState.system,
+            readProcesses: ProcessReader.read,
+            readGPU: GPUReader.read,
+            readGPUClientCounters: GPUClientReader.read,
+            readFallbackUsage: PSReader.usage,
             deliver: { DispatchQueue.main.async(execute: $0) }
         )
     }

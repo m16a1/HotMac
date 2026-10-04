@@ -46,7 +46,9 @@ extension TemperatureModel {
                 highest: PreviewData.hottestValue
             ),
             throttleState: PreviewData.throttleState,
-            fans: PreviewData.fans
+            fans: PreviewData.fans,
+            processes: PreviewData.processes,
+            gpuUtilization: PreviewData.gpuUtilization
         )
     }
 }

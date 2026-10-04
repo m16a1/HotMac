@@ -22,6 +22,7 @@ struct SettingsView: View {
         static let highest = "Highest"
         static let lastUpdate = "Last update"
         static let throttling = "Throttling"
+        static let gpu = "GPU"
         static let throttleNominal = "Nominal"
         static let throttleFair = "Fair"
         static let throttleSerious = "Serious"
@@ -89,6 +90,10 @@ struct SettingsView: View {
                 LabeledContent(Labels.throttling) {
                     Text(Self.throttlingText(model.throttleState))
                         .foregroundStyle(Self.throttlingColor(model.throttleState))
+                }
+                LabeledContent(Labels.gpu) {
+                    Text(model.gpuUtilization.map { UI.percent($0.percent) } ?? UI.Text.noValue)
+                        .monospacedDigit()
                 }
                 if let error = model.errorMessage {
                     LabeledContent(Labels.error) {

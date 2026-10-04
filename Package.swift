@@ -68,7 +68,9 @@ let package = Package(
                 // `TemperatureModel.loadPreviewData()` is DEBUG-only.
                 .define("DEBUG", .when(configuration: .debug))
             ],
-            linkerSettings: [.linkedFramework("IOKit")]
+            linkerSettings: [
+                .linkedFramework("IOKit"),
+            ]
         ),
         // The app itself.
         .executableTarget(

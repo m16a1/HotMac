@@ -31,6 +31,8 @@ struct TemperatureModelTests {
         #expect(model.throttleState == nil)
         #expect(model.fans.isEmpty)
         #expect(model.fanHistory.isEmpty)
+        #expect(model.processes.isEmpty)
+        #expect(model.gpuUtilization == nil)
     }
 
     @Test func aSampleIsPublished() {
@@ -49,6 +51,161 @@ struct TemperatureModelTests {
         #expect(model.fans.first?.maximum == 5349.0)
         #expect(model.fanHistory.count == 1)
         #expect(model.fanHistory.first?.speeds[0] == 2150.0)
+    }
+
+    /// The processes travel with the reading too: the first sample has no
+    /// baseline so its rates are zero, and the next one carries the new
+    /// counters. The exact percentage is the pure layer's business.
+    @Test func processesArePublishedWithTheReading() {
+        var counters = [ProcessCounters(pid: 42, name: "busy", cpuSeconds: 10, memoryBytes: 1_000)]
+        let model = testModel(
+            makeSMC: { SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])) },
+            readProcesses: { counters }
+        )
+
+        model.sample()
+        #expect(model.processes.map(\.pid) == [42])
+        #expect(model.processes.first?.cpuPercent == 0)
+        #expect(model.processes.first?.memoryBytes == 1_000)
+
+        counters = [ProcessCounters(pid: 42, name: "busy", cpuSeconds: 12, memoryBytes: 2_000)]
+        model.sample()
+        #expect(model.processes.first?.memoryBytes == 2_000)
+        #expect(model.processes.first?.cpuPercent ?? -1 >= 0)
+    }
+
+    /// The GPU happens to be a whole-device figure, and a machine whose
+    /// accelerator reports nothing must not fail the tick.
+    @Test func gpuUtilizationIsPublishedWhenTheAcceleratorReportsIt() {
+        let busy = testModel(
+            makeSMC: { SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])) },
+            readGPU: { GPUUtilization(percent: 36) }
+        )
+        busy.sample()
+
+        #expect(busy.gpuUtilization?.percent == 36)
+    }
+
+    /// A missing GPU figure is not an error, just nothing to show.
+    @Test func aMachineWithNoGPUFigureStillPublishes() {
+        let quiet = testModel(
+            makeSMC: { SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])) }
+        )
+        quiet.sample()
+
+        #expect(quiet.snapshot != nil)
+        #expect(quiet.gpuUtilization == nil)
+    }
+
+    /// A GPU share is derived from two counter samples, so the first tick has
+    /// no baseline to form one from and the column reads 0 for one tick. The
+    /// interval is real wall time here, so the size of the share is the pure
+    /// layer's business.
+    @Test func theGPUColumnIsFilledOnceThereIsABaseline() {
+        var gpuSeconds = 10.0
+        let model = testModel(
+            makeSMC: { SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])) },
+            readProcesses: { [ProcessCounters(pid: 42, name: "busy", cpuSeconds: 1, memoryBytes: 1_000)] },
+            readGPUClientCounters: { [GPUClientCounters(pid: 42, name: "busy", gpuSeconds: gpuSeconds)] }
+        )
+
+        model.sample()
+        #expect(model.processes.first?.gpuPercent == 0)
+
+        Thread.sleep(forTimeInterval: 0.01)
+        gpuSeconds += 0.5
+        model.sample()
+
+        #expect((model.processes.first?.gpuPercent ?? -1) > 0)
+    }
+
+    /// A process holding a GPU client and using none of it reads 0%.
+    @Test func aGPUClientThatUsesNothingReadsZero() {
+        let counters = [GPUClientCounters(pid: 42, name: "quiet", gpuSeconds: 10)]
+        let model = testModel(
+            makeSMC: { SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])) },
+            readProcesses: { [ProcessCounters(pid: 42, name: "quiet", cpuSeconds: 1, memoryBytes: 1_000)] },
+            readGPUClientCounters: { counters }
+        )
+
+        model.sample()
+        Thread.sleep(forTimeInterval: 0.01)
+        model.sample()
+
+        #expect(model.processes.first?.gpuPercent == 0)
+    }
+
+    /// A process that has never reached the GPU reads 0%: holding no GPU client
+    /// is using none of the device, so the GPU column has no dash.
+    @Test func aProcessWithNoGPUClientReadsZero() {
+        var cpuSeconds = 1.0
+        let model = testModel(
+            makeSMC: { SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])) },
+            readProcesses: { [ProcessCounters(pid: 42, name: "quiet", cpuSeconds: cpuSeconds, memoryBytes: 1_000)] }
+        )
+
+        model.sample()
+        Thread.sleep(forTimeInterval: 0.01)
+        cpuSeconds += 0.5
+        model.sample()
+
+        #expect(model.processes.first?.cpuPercent ?? -1 > 0)
+        #expect(model.processes.first?.gpuPercent == 0)
+    }
+
+    /// The CPU and memory fallback runs only while the Processes screen is on
+    /// screen, and it is asked only about the processes the kernel would not
+    /// describe.
+    @Test func theFallbackRunsForTheHiddenRowsWhileVisible() {
+        var gpuSeconds = 5.0
+        var asked: [[Int32]] = []
+        let usage = ProcessUsage(cpuPercent: 31.5, memoryBytes: 277_544_960)
+        let model = testModel(
+            makeSMC: { SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])) },
+            readProcesses: { [ProcessCounters(pid: 42, name: "quiet", cpuSeconds: 1, memoryBytes: 1_000)] },
+            readGPUClientCounters: { [GPUClientCounters(pid: 170, name: "WindowServer", gpuSeconds: gpuSeconds)] },
+            readFallbackUsage: { pids in asked.append(pids); return [170: usage] }
+        )
+
+        model.sample()
+        Thread.sleep(forTimeInterval: 0.01)
+        gpuSeconds += 0.5
+        model.sample()
+
+        #expect(asked.isEmpty)
+
+        model.processesVisible = true
+        Thread.sleep(forTimeInterval: 0.01)
+        gpuSeconds += 0.5
+        model.sample()
+
+        #expect(asked == [[170]])
+        let windowServer = model.processes.first { $0.pid == 170 }
+        #expect(windowServer?.cpuPercent == 31.5)
+        #expect(windowServer?.memoryBytes == 277_544_960)
+    }
+
+    /// With the Processes screen hidden the fallback is not run at all, so the
+    /// row the kernel would not describe keeps its dashes.
+    @Test func theFallbackIsNotRunWhileHidden() {
+        var gpuSeconds = 5.0
+        var called = false
+        let model = testModel(
+            makeSMC: { SMC(transport: FakeSMCTransport(order: ["Tp00"], table: ["Tp00": floatEntry(45.0)])) },
+            readProcesses: { [ProcessCounters(pid: 42, name: "quiet", cpuSeconds: 1, memoryBytes: 1_000)] },
+            readGPUClientCounters: { [GPUClientCounters(pid: 170, name: "WindowServer", gpuSeconds: gpuSeconds)] },
+            readFallbackUsage: { _ in called = true; return [170: ProcessUsage(cpuPercent: 31.5, memoryBytes: 1)] }
+        )
+
+        model.sample()
+        Thread.sleep(forTimeInterval: 0.01)
+        gpuSeconds += 0.5
+        model.sample()
+
+        #expect(called == false)
+        let windowServer = model.processes.first { $0.pid == 170 }
+        #expect(windowServer?.cpuPercent == nil)
+        #expect(windowServer?.memoryBytes == nil)
     }
 
     /// The throttling level travels with the reading, so the UI can show it
@@ -407,6 +564,9 @@ struct TemperatureModelTests {
             #expect(model.fans.last?.maximum == 5777.0)
             #expect(model.fanHistory.count == PreviewData.sampleCount)
             #expect(model.fanHistory.first?.speeds[1] != nil)
+            #expect(model.processes.count == PreviewData.processes.count)
+            #expect(model.processes.first?.name == "Google Chrome")
+            #expect(model.gpuUtilization?.percent == 36)
             #expect(!model.selectedSeries.isEmpty)
         }
     }

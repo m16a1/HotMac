@@ -56,6 +56,8 @@ public final class TemperatureModel: ObservableObject {
         let point: HistoryPoint
         let throttleState: ThrottleState
         let fans: [FanReading]
+        let processes: [ProcessReading]
+        let gpuUtilization: GPUUtilization?
     }
 
     @Published public private(set) var snapshot: TemperatureSnapshot? {
@@ -72,6 +74,12 @@ public final class TemperatureModel: ObservableObject {
     /// The machine's fans, ordered by number. Empty until the first reading,
     /// and on a machine with none.
     @Published public private(set) var fans: [FanReading] = []
+    /// The busiest processes, busiest first. Empty until the first reading,
+    /// which has no earlier counters to compute a rate from.
+    @Published public private(set) var processes: [ProcessReading] = []
+    /// How busy the whole GPU is. Nil until the first reading, and on a machine
+    /// whose accelerator publishes no such figure.
+    @Published public private(set) var gpuUtilization: GPUUtilization?
     @Published public var refreshPeriod: Double = TemperatureModel.defaultRefreshPeriod {
         didSet { persistPeriod(); restartTimer() }
     }
@@ -84,6 +92,24 @@ public final class TemperatureModel: ObservableObject {
     /// survives a relaunch. Empty until the first reading seeds the defaults.
     @Published public var selectedSeries: Set<String> = [] {
         didSet { persistSelectedSeries() }
+    }
+
+    /// Whether the Processes screen is on screen. The CPU fallback runs only
+    /// while it is, because it costs a subprocess and nothing else reads those
+    /// figures. The view writes it on the main queue and the sampling queue reads
+    /// it, so it is guarded rather than published: nothing redraws when it
+    /// changes.
+    public var processesVisible: Bool {
+        get {
+            visibilityLock.lock()
+            defer { visibilityLock.unlock() }
+            return isProcessesVisible
+        }
+        set {
+            visibilityLock.lock()
+            defer { visibilityLock.unlock() }
+            isProcessesVisible = newValue
+        }
     }
 
     private let queue = DispatchQueue(label: TemperatureModel.queueLabel, qos: .utility)
@@ -100,6 +126,23 @@ public final class TemperatureModel: ObservableObject {
     /// on what the host happens to be doing.
     private let readThrottleState: () -> ThrottleState
 
+    /// Reads every process's counters for this tick. Injectable so tests do not
+    /// depend on what the host happens to be running.
+    private let readProcesses: () -> [ProcessCounters]
+
+    /// Reads the GPU's utilization for this tick. Injectable so tests do not
+    /// depend on the host's GPU.
+    private let readGPU: () -> GPUUtilization?
+
+    /// Reads every process's cumulative GPU time for this tick, one entry per GPU
+    /// client. Injectable so tests do not depend on what the host is rendering.
+    private let readGPUClientCounters: () -> [GPUClientCounters]
+
+    /// Reads the CPU and memory `ps` reports for the processes the kernel will
+    /// not describe, given the pids that need them. Injectable so tests do not
+    /// spawn anything.
+    private let readFallbackUsage: ([Int32]) -> [Int32: ProcessUsage]
+
     /// Hands work back to the main thread. Injectable so tests can stay
     /// synchronous instead of spinning a run loop.
     private let deliver: (@escaping () -> Void) -> Void
@@ -107,9 +150,24 @@ public final class TemperatureModel: ObservableObject {
     private var timer: DispatchSourceTimer?
     private var session: SMCSession?
     private var started = false
+    /// Guards `isProcessesVisible`, which the main queue writes and the sampling
+    /// queue reads.
+    private let visibilityLock = NSLock()
+    private var isProcessesVisible = false
     /// Whether the graph's series have been decided: restored from storage, or
     /// seeded from the first reading.
     private var seededSelection = false
+
+    /// The previous tick's process counters and when they were taken, so the
+    /// next tick can turn the host's running CPU totals into a rate. Nil until
+    /// the first tick.
+    private var previousProcessCounters: [ProcessCounters] = []
+    private var previousProcessTime: Date?
+
+    /// The previous tick's GPU totals, folded one per process. Both counter
+    /// families are sampled in the same tick, so they share a timestamp, and
+    /// their shares are formed over the same interval.
+    private var previousGPUCounters: [GPUClientCounters] = []
 
     /// Dependencies are required rather than defaulted so that this class
     /// contains no production wiring of its own; `TemperatureModel.live()`
@@ -120,10 +178,18 @@ public final class TemperatureModel: ObservableObject {
         brand: String,
         makeSMC: @escaping () throws -> SMC,
         readThrottleState: @escaping () -> ThrottleState,
+        readProcesses: @escaping () -> [ProcessCounters],
+        readGPU: @escaping () -> GPUUtilization?,
+        readGPUClientCounters: @escaping () -> [GPUClientCounters],
+        readFallbackUsage: @escaping ([Int32]) -> [Int32: ProcessUsage],
         deliver: @escaping (@escaping () -> Void) -> Void
     ) {
         self.makeSMC = makeSMC
         self.readThrottleState = readThrottleState
+        self.readProcesses = readProcesses
+        self.readGPU = readGPU
+        self.readGPUClientCounters = readGPUClientCounters
+        self.readFallbackUsage = readFallbackUsage
         self.deliver = deliver
         self.brand = brand
         if let stored = UserDefaults.standard.object(forKey: Storage.refreshPeriodKey) as? Double,
@@ -152,7 +218,9 @@ public final class TemperatureModel: ObservableObject {
         fanHistory: [FanHistoryPoint],
         snapshot: TemperatureSnapshot?,
         throttleState: ThrottleState,
-        fans: [FanReading]
+        fans: [FanReading],
+        processes: [ProcessReading],
+        gpuUtilization: GPUUtilization?
     ) {
         self.history = history
         self.fanHistory = fanHistory
@@ -160,6 +228,8 @@ public final class TemperatureModel: ObservableObject {
         self.snapshot = snapshot
         self.throttleState = throttleState
         self.fans = fans
+        self.processes = processes
+        self.gpuUtilization = gpuUtilization
     }
 #endif
 
@@ -246,15 +316,44 @@ public final class TemperatureModel: ObservableObject {
         let table = active.readTable()
         guard !table.isEmpty else { return nil }
 
+        let now = Date()
         let snapshot = SensorCatalog.snapshot(brand: brand, table: table)
         let fans = SensorCatalog.fanReadings(from: active.readFans())
         var values: [String: Double] = [:]
         for group in snapshot.groups { values[group.name] = group.average }
+
+        let counters = readProcesses()
+        let elapsed = previousProcessTime.map { now.timeIntervalSince($0) } ?? 0
+        // One fold and one interval for both halves: the GPU clients are read in
+        // this same tick, so their totals are as old as the process counters'.
+        let gpuCounters = GPUClientCounters.merged(readGPUClientCounters())
+        let gpuShares = GPUShare.readings(
+            previous: previousGPUCounters,
+            current: gpuCounters,
+            elapsed: elapsed
+        )
+        // The rows the kernel would not describe have no figures of their own.
+        // `ps` is the only unprivileged source for them, so it is asked only for
+        // those pids, and only while the screen that shows them is on screen.
+        let undescribed = ProcessCounters.undescribed(counters, gpuShares: gpuShares)
+        let processes = ProcessCounters.readings(
+            previous: previousProcessCounters,
+            current: counters,
+            elapsed: elapsed,
+            gpuShares: gpuShares,
+            fallback: processesVisible ? readFallbackUsage(undescribed.map(\.pid)) : [:]
+        )
+        previousProcessCounters = counters
+        previousGPUCounters = gpuCounters
+        previousProcessTime = now
+
         return Tick(
             snapshot: snapshot,
-            point: HistoryPoint(time: Date(), values: values),
+            point: HistoryPoint(time: now, values: values),
             throttleState: readThrottleState(),
-            fans: fans
+            fans: fans,
+            processes: processes,
+            gpuUtilization: readGPU()
         )
     }
 
@@ -268,7 +367,9 @@ public final class TemperatureModel: ObservableObject {
                     snapshot: tick.snapshot,
                     point: tick.point,
                     throttleState: tick.throttleState,
-                    fans: tick.fans
+                    fans: tick.fans,
+                    processes: tick.processes,
+                    gpuUtilization: tick.gpuUtilization
                 )
             }
         } catch {
@@ -283,11 +384,15 @@ public final class TemperatureModel: ObservableObject {
         snapshot: TemperatureSnapshot,
         point: HistoryPoint,
         throttleState: ThrottleState,
-        fans: [FanReading]
+        fans: [FanReading],
+        processes: [ProcessReading],
+        gpuUtilization: GPUUtilization?
     ) {
         self.snapshot = snapshot
         self.throttleState = throttleState
         self.fans = fans
+        self.processes = processes
+        self.gpuUtilization = gpuUtilization
         self.errorMessage = nil
         self.lastUpdate = point.time
         history.append(point)

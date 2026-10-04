@@ -21,6 +21,24 @@ enum PreviewData {
         FanReading(index: 1, current: 2380, minimum: 1350, maximum: 5777),
     ]
 
+    /// A plausible process table: a few recognisable names, busiest first, as
+    /// the real ranking would leave them. The last one has no GPU client, so it
+    /// reads 0%, the way the real table shows it.
+    static let processes: [ProcessReading] = [
+        ProcessReading(pid: 812, name: "Google Chrome", cpuPercent: 41.2,
+                       memoryBytes: 1_204_000_000, gpuPercent: 8.4),
+        ProcessReading(pid: 2331, name: "Xcode", cpuPercent: 28.7,
+                       memoryBytes: 2_140_000_000, gpuPercent: 31.6),
+        ProcessReading(pid: 188, name: "WindowServer", cpuPercent: 12.4,
+                       memoryBytes: 486_000_000, gpuPercent: 44.9),
+        ProcessReading(pid: 1337, name: "python3", cpuPercent: 6.1,
+                       memoryBytes: 212_000_000, gpuPercent: 0),
+    ]
+
+    /// A plausible GPU reading: the machine is clearly doing work, which is the
+    /// state the process table alone no longer shows.
+    static let gpuUtilization = GPUUtilization(percent: 36)
+
     /// A fan's speed at a point in the preview: a slow swing around its
     /// reported current, so the graph has something to draw.
     static func fanSpeed(_ fan: FanReading, inPhase phase: Double) -> Double {
