@@ -288,8 +288,8 @@ release, bump it, commit, and push a matching tag:
 
 ```bash
 ./build.py --dist   # writes dist/HotMac-<version>.zip and .dmg
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 The `Release` GitHub Actions workflow (`.github/workflows/release.yml`) runs
