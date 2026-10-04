@@ -37,6 +37,23 @@ and lets you watch the individual component temperatures over time.
     Hovering a series explains what that sensor measures,
     and the checked series are remembered between launches.
 
+## Screenshots
+
+The menu bar shows the current highest real-sensor reading, and its menu opens
+each screen:
+
+![HotMac in the menu bar, with its menu open](docs/screenshots/menu.png)
+
+The window holds four screens:
+
+| Temperatures | Processes |
+| --- | --- |
+| ![Temperatures screen](docs/screenshots/temperatures.png) | ![Processes screen](docs/screenshots/processes.png) |
+
+| Fans | Settings |
+| --- | --- |
+| ![Fans screen](docs/screenshots/fans.png) | ![Settings screen](docs/screenshots/settings.png) |
+
 ## Install
 
 Two free ways. The app is ad-hoc signed but **not notarized** — there is no paid
@@ -119,6 +136,7 @@ name and rebuild to change it.
   `FansView.swift`, `GraphsView.swift`,
   `ChartPalette.swift`, `UI.swift`.
 - `Tests/SensorsTests/` — the suite, one file per unit under test.
+- `docs/screenshots/` — the images the README shows.
 - `build.py`, `test.py`,
   `Info.plist`, `AppIcon.png`, `Package.swift`.
 
